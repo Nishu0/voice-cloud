@@ -45,6 +45,7 @@ type Querier interface {
 	GetAttemptUsage(ctx context.Context, arg GetAttemptUsageParams) (AttemptUsage, error)
 	GetConnection(ctx context.Context, id int64) (Connection, error)
 	GetDeployment(ctx context.Context, id int64) (Deployment, error)
+	GetDeploymentHealth(ctx context.Context, deploymentID int64) (DeploymentHealth, error)
 	GetModel(ctx context.Context, id int64) (Model, error)
 	GetRequest(ctx context.Context, id string) (Request, error)
 	GetRequestByIdempotencyKey(ctx context.Context, arg GetRequestByIdempotencyKeyParams) (Request, error)
@@ -57,6 +58,7 @@ type Querier interface {
 	ListConnections(ctx context.Context) ([]Connection, error)
 	ListDeploymentLanguages(ctx context.Context, deploymentID int64) ([]DeploymentLanguage, error)
 	ListDeployments(ctx context.Context) ([]Deployment, error)
+	ListHealthDeploymentIDs(ctx context.Context) ([]int64, error)
 	ListModelDeployments(ctx context.Context, modelID int64) ([]Deployment, error)
 	ListModels(ctx context.Context) ([]Model, error)
 	ListPolicyDeployments(ctx context.Context, policyID int64) ([]Deployment, error)
@@ -73,6 +75,7 @@ type Querier interface {
 	RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (int64, error)
 	SetAttemptFirstOutput(ctx context.Context, arg SetAttemptFirstOutputParams) (int64, error)
 	SetAttemptProviderRequestID(ctx context.Context, arg SetAttemptProviderRequestIDParams) (int64, error)
+	SetDeploymentHealth(ctx context.Context, arg SetDeploymentHealthParams) (int64, error)
 	SetPolicyTarget(ctx context.Context, arg SetPolicyTargetParams) error
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) (int64, error)
 	StartRequest(ctx context.Context, id string) (int64, error)

@@ -9,8 +9,8 @@ The Compose stack has two services:
 - `web`: builds SvelteKit with adapter-node and runs the generated server using
   Bun. Both build and runtime stages use `oven/bun:1.3.13`.
 
-The worker currently waits for shutdown; background job processing has not been
-implemented. No extra worker service or database server is needed.
+The worker performs deployment health checks and expired auth-record cleanup;
+see [the worker guide](worker.md). No extra worker service or database server is needed.
 
 ## Start
 

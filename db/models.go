@@ -74,6 +74,17 @@ type Deployment struct {
 	UpdatedAt        int64  `json:"updated_at"`
 }
 
+type DeploymentHealth struct {
+	DeploymentID int64          `json:"deployment_id"`
+	ProbeKind    string         `json:"probe_kind"`
+	Status       string         `json:"status"`
+	CheckedAt    int64          `json:"checked_at"`
+	ExpiresAt    int64          `json:"expires_at"`
+	LatencyMs    sql.NullInt64  `json:"latency_ms"`
+	ErrorCode    sql.NullString `json:"error_code"`
+	ConfigHash   string         `json:"config_hash"`
+}
+
 type DeploymentLanguage struct {
 	DeploymentID int64  `json:"deployment_id"`
 	LanguageTag  string `json:"language_tag"`

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"voice-cloud/db"
 )
@@ -32,7 +33,7 @@ func setup(t *testing.T) *testAPI {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("migrate: %v: %s", err, output)
 	}
-	database, err := openDatabase(path)
+	database, err := db.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +265,7 @@ func TestActivityAndDatabaseSettings(t *testing.T) {
 }
 
 func TestStartupRejectsMissingDatabase(t *testing.T) {
-	if database, err := openDatabase(filepath.Join(t.TempDir(), "missing.db")); err == nil {
+	if database, err := db.Open(filepath.Join(t.TempDir(), "missing.db")); err == nil {
 		_ = database.Close()
 		t.Fatal("missing database should fail")
 	}
@@ -293,5 +294,70 @@ func TestCustomAndLocalConnections(t *testing.T) {
 				t.Fatalf("custom/local deployment was not saved: %#v", deployment)
 			}
 		})
+	}
+}
+
+func TestDeploymentHealth(t *testing.T) {
+	a := setup(t)
+	seedConfig(a)
+	path := "/v1/deployments/1/health"
+	unknown := jsonObject(t, a.call("GET", path, "", 200))
+	if unknown["status"] != "unknown" || unknown["error_code"] != "not_checked" || unknown["checked_at"] != nil {
+		t.Fatalf("initial health: %#v", unknown)
+	}
+	queries := db.New(a.db)
+	ctx := context.Background()
+	deployment, err := queries.GetDeployment(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection, err := queries.GetConnection(ctx, deployment.ConnectionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UnixMilli()
+	_, err = queries.SetDeploymentHealth(ctx, db.SetDeploymentHealthParams{
+		DeploymentID: 1, ProbeKind: "reachability", Status: "healthy", CheckedAt: now,
+		ExpiresAt: now + 60000, LatencyMs: sql.NullInt64{Int64: 12, Valid: true},
+		ConfigHash: db.HealthConfigHash(deployment, connection),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthy := jsonObject(t, a.call("GET", path, "", 200))
+	if healthy["status"] != "healthy" || healthy["latency_ms"] != float64(12) || healthy["error_code"] != nil {
+		t.Fatalf("fresh health: %#v", healthy)
+	}
+	if _, err := a.db.Exec("UPDATE deployment_health SET checked_at = ?, expires_at = ?", now-2000, now-1000); err != nil {
+		t.Fatal(err)
+	}
+	stale := jsonObject(t, a.call("GET", path, "", 200))
+	if stale["status"] != "unknown" || stale["error_code"] != "stale" {
+		t.Fatalf("stale health: %#v", stale)
+	}
+	if _, err := a.db.Exec("UPDATE deployment_health SET expires_at = ?", now+60000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.db.Exec(`UPDATE connections SET base_url = 'http://changed.example'`); err != nil {
+		t.Fatal(err)
+	}
+	changed := jsonObject(t, a.call("GET", path, "", 200))
+	if changed["status"] != "unknown" || changed["error_code"] != "config_changed" || changed["latency_ms"] != nil {
+		t.Fatalf("changed configuration: %#v", changed)
+	}
+	if _, err := a.db.Exec("UPDATE connections SET enabled = 0"); err != nil {
+		t.Fatal(err)
+	}
+	disabled := jsonObject(t, a.call("GET", path, "", 200))
+	if disabled["status"] != "unknown" || disabled["error_code"] != "disabled" {
+		t.Fatalf("disabled health: %#v", disabled)
+	}
+	a.call("GET", "/v1/deployments/999/health", "", 404)
+	a.call("GET", "/v1/deployments/nope/health", "", 400)
+	r := httptest.NewRequest("GET", path, nil)
+	w := httptest.NewRecorder()
+	a.handler.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatal("health endpoint is not protected")
 	}
 }

@@ -272,3 +272,21 @@ DELETE FROM user_tokens WHERE user_id = ? AND purpose = ?;
 
 -- name: DeleteExpiredUserTokens :execrows
 DELETE FROM user_tokens WHERE expires_at <= ?;
+
+-- name: ListHealthDeploymentIDs :many
+SELECT d.id FROM deployments d JOIN connections c ON c.id = d.connection_id
+WHERE d.enabled = 1 AND c.enabled = 1 ORDER BY d.id;
+
+-- name: GetDeploymentHealth :one
+SELECT * FROM deployment_health WHERE deployment_id = ?;
+
+-- name: SetDeploymentHealth :execrows
+INSERT INTO deployment_health
+    (deployment_id, probe_kind, status, checked_at, expires_at, latency_ms, error_code, config_hash)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (deployment_id) DO UPDATE SET
+    probe_kind = excluded.probe_kind, status = excluded.status,
+    checked_at = excluded.checked_at, expires_at = excluded.expires_at,
+    latency_ms = excluded.latency_ms, error_code = excluded.error_code,
+    config_hash = excluded.config_hash
+WHERE excluded.checked_at >= deployment_health.checked_at;

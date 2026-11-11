@@ -27,6 +27,7 @@ proxy before exposing the API outside a trusted local environment.
 | `/v1/models/{id}` | GET, PUT, DELETE | Read/replace/delete a model |
 | `/v1/deployments` | GET, POST | List/create deployments |
 | `/v1/deployments/{id}` | GET, PUT, DELETE | Read/replace/delete a deployment |
+| `/v1/deployments/{id}/health` | GET | Read worker health; stale/changed/disabled results are unknown |
 | `/v1/deployments/{id}/languages` | GET | List supported language tags |
 | `/v1/deployments/{id}/languages/{language}` | PUT, DELETE | Add/remove a language tag |
 | `/v1/policies` | GET, POST | List/create routing policies |
@@ -40,8 +41,9 @@ proxy before exposing the API outside a trusted local environment.
 | `/v1/requests/{request}/attempts` | GET | List provider attempts in order |
 | `/v1/requests/{request}/usage` | GET | List usage across all attempts |
 
-This is the configuration and observability API. Provider inference, streaming,
-and worker-written activity records are not implemented yet. There are no public
+This is the configuration and observability API. The worker records deployment
+health; see [the worker guide](worker.md) for probe configuration. Provider
+inference, streaming, and activity recording are not implemented yet. There are no public
 endpoints for fabricating or deleting activity records.
 
 ## Request and response conventions

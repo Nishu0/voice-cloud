@@ -2,43 +2,17 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
-)
 
-func openDatabase(path string) (*sql.DB, error) {
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return nil, err
-	}
-	uri := url.URL{Scheme: "file", Path: absolute}
-	options := url.Values{"mode": {"rw"}, "_pragma": {"foreign_keys(1)", "busy_timeout(5000)", "journal_mode(WAL)"}}
-	uri.RawQuery = options.Encode()
-	database, err := sql.Open("sqlite", uri.String())
-	if err != nil {
-		return nil, err
-	}
-	database.SetMaxOpenConns(1)
-	database.SetMaxIdleConns(1)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	var count int
-	if err = database.QueryRowContext(ctx, "SELECT count(*) FROM deployments").Scan(&count); err != nil {
-		_ = database.Close()
-		return nil, fmt.Errorf("open migrated database (run make db-up first): %w", err)
-	}
-	return database, nil
-}
+	"voice-cloud/db"
+)
 
 func run(ctx context.Context) error {
 	token := os.Getenv("ADMIN_TOKEN")
@@ -49,7 +23,7 @@ func run(ctx context.Context) error {
 	if path == "" {
 		path = "data/voice-cloud.db"
 	}
-	database, err := openDatabase(path)
+	database, err := db.Open(path)
 	if err != nil {
 		return err
 	}

@@ -850,6 +850,26 @@ func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, erro
 	return i, err
 }
 
+const getDeploymentHealth = `-- name: GetDeploymentHealth :one
+SELECT deployment_id, probe_kind, status, checked_at, expires_at, latency_ms, error_code, config_hash FROM deployment_health WHERE deployment_id = ?
+`
+
+func (q *Queries) GetDeploymentHealth(ctx context.Context, deploymentID int64) (DeploymentHealth, error) {
+	row := q.db.QueryRowContext(ctx, getDeploymentHealth, deploymentID)
+	var i DeploymentHealth
+	err := row.Scan(
+		&i.DeploymentID,
+		&i.ProbeKind,
+		&i.Status,
+		&i.CheckedAt,
+		&i.ExpiresAt,
+		&i.LatencyMs,
+		&i.ErrorCode,
+		&i.ConfigHash,
+	)
+	return i, err
+}
+
 const getModel = `-- name: GetModel :one
 SELECT id, name, publisher, task, version, created_at, updated_at FROM models WHERE id = ?
 `
@@ -1207,6 +1227,34 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHealthDeploymentIDs = `-- name: ListHealthDeploymentIDs :many
+SELECT d.id FROM deployments d JOIN connections c ON c.id = d.connection_id
+WHERE d.enabled = 1 AND c.enabled = 1 ORDER BY d.id
+`
+
+func (q *Queries) ListHealthDeploymentIDs(ctx context.Context) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listHealthDeploymentIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1719,6 +1767,46 @@ type SetAttemptProviderRequestIDParams struct {
 
 func (q *Queries) SetAttemptProviderRequestID(ctx context.Context, arg SetAttemptProviderRequestIDParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setAttemptProviderRequestID, arg.ProviderRequestID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setDeploymentHealth = `-- name: SetDeploymentHealth :execrows
+INSERT INTO deployment_health
+    (deployment_id, probe_kind, status, checked_at, expires_at, latency_ms, error_code, config_hash)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (deployment_id) DO UPDATE SET
+    probe_kind = excluded.probe_kind, status = excluded.status,
+    checked_at = excluded.checked_at, expires_at = excluded.expires_at,
+    latency_ms = excluded.latency_ms, error_code = excluded.error_code,
+    config_hash = excluded.config_hash
+WHERE excluded.checked_at >= deployment_health.checked_at
+`
+
+type SetDeploymentHealthParams struct {
+	DeploymentID int64          `json:"deployment_id"`
+	ProbeKind    string         `json:"probe_kind"`
+	Status       string         `json:"status"`
+	CheckedAt    int64          `json:"checked_at"`
+	ExpiresAt    int64          `json:"expires_at"`
+	LatencyMs    sql.NullInt64  `json:"latency_ms"`
+	ErrorCode    sql.NullString `json:"error_code"`
+	ConfigHash   string         `json:"config_hash"`
+}
+
+func (q *Queries) SetDeploymentHealth(ctx context.Context, arg SetDeploymentHealthParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setDeploymentHealth,
+		arg.DeploymentID,
+		arg.ProbeKind,
+		arg.Status,
+		arg.CheckedAt,
+		arg.ExpiresAt,
+		arg.LatencyMs,
+		arg.ErrorCode,
+		arg.ConfigHash,
+	)
 	if err != nil {
 		return 0, err
 	}

@@ -32,7 +32,7 @@ class MigrationTest(unittest.TestCase):
         self.make('db-up')
         with sqlite3.connect(self.path) as actual:
             original_schema = schema(actual)
-            self.assertEqual(len([row for row in original_schema if row[0] == 'table']), 13)
+            self.assertEqual(len([row for row in original_schema if row[0] == 'table']), 14)
             actual.execute("""
                 INSERT INTO connections (name, adapter, location_kind, base_url)
                 VALUES ('test', 'whisper', 'local', 'http://localhost:9000')
@@ -41,6 +41,10 @@ class MigrationTest(unittest.TestCase):
         self.make('db-status')
         self.make('db-version')
         with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM connections').fetchone(), (1,))
+        self.make('db-down')
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(len([row for row in schema(db) if row[0] == 'table']), 13)
             self.assertEqual(db.execute('SELECT count(*) FROM connections').fetchone(), (1,))
         self.make('db-down')
         with sqlite3.connect(self.path) as db:
@@ -59,7 +63,7 @@ class MigrationTest(unittest.TestCase):
         self.make('db-backup', f'BACKUP={backup}')
         with sqlite3.connect(backup) as db:
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone(), ('ok',))
-            self.assertEqual(len([row for row in schema(db) if row[0] == 'table']), 13)
+            self.assertEqual(len([row for row in schema(db) if row[0] == 'table']), 14)
         before = backup.read_bytes()
         self.assertNotEqual(
             self.make('db-backup', f'BACKUP={backup}', check=False).returncode, 0,

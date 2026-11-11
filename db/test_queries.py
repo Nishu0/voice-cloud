@@ -92,7 +92,7 @@ class CodeGenerationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='voice-cloud-codegen-') as directory:
             temporary = Path(directory)
             shutil.copytree(ROOT / 'db/migrations', temporary / 'db/migrations')
-            for name in ('query.sql', 'go.mod'):
+            for name in ('query.sql', 'go.mod', 'go.sum'):
                 shutil.copy(ROOT / 'db' / name, temporary / 'db' / name)
             shutil.copy(ROOT / 'sqlc.yml', temporary / 'sqlc.yml')
             result = subprocess.run(['sqlc', 'generate'], cwd=temporary,

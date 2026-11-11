@@ -24,6 +24,7 @@ func newHandler(database *sql.DB, adminToken string) http.Handler {
 		}
 	}
 	admin.HandleFunc("GET /v1/deployments/{id}/languages", handle(a.languages))
+	admin.HandleFunc("GET /v1/deployments/{id}/health", handle(a.deploymentHealth))
 	admin.HandleFunc("PUT /v1/deployments/{id}/languages/{language}", handle(a.languages))
 	admin.HandleFunc("DELETE /v1/deployments/{id}/languages/{language}", handle(a.languages))
 	admin.HandleFunc("GET /v1/policies/{id}/targets", handle(a.targets))

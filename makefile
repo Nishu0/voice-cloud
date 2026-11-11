@@ -5,12 +5,14 @@ API_ADDR ?= 127.0.0.1:8080
 MIGRATIONS_DIR := db/migrations
 GOOSE := goose -env=none -dir "$(MIGRATIONS_DIR)" sqlite3 "$(DB_PATH)"
 
-.PHONY: help api-run api-check db-generate db-seed db-new db-up db-down db-status db-version db-shell db-backup db-check
+.PHONY: help api-run api-check worker-run worker-check db-generate db-seed db-new db-up db-down db-status db-version db-shell db-backup db-check
 
 help:
 	@printf '%s\n' \
 	  'make api-run                    Migrate and run the API (ADMIN_TOKEN required)' \
 	  'make api-check                  Run API integration tests with race detection' \
+	  'make worker-run                 Migrate and run the background worker' \
+	  'make worker-check               Run worker integration tests with race detection' \
 	  'make db-generate                Generate Go code from SQL queries (sqlc)' \
 	  'make db-seed                    Migrate and seed provider connections' \
 	  'make db-new NAME=add_feature    Create a SQL migration (Goose)' \
@@ -34,6 +36,12 @@ api-run: db-up
 
 api-check:
 	go -C apps/api test -race ./...
+
+worker-run: db-up
+	DB_PATH="$(abspath $(DB_PATH))" go -C apps/worker run .
+
+worker-check:
+	go -C apps/worker test -race ./...
 
 db-new:
 	@test -n "$(NAME)" || { echo 'Usage: make db-new NAME=add_feature'; exit 1; }
