@@ -273,3 +273,25 @@ func TestStartupRejectsMissingDatabase(t *testing.T) {
 		t.Fatal("missing admin token should fail")
 	}
 }
+
+func TestCustomAndLocalConnections(t *testing.T) {
+	a := setup(t)
+	for index, provider := range []struct{ adapter, location, url string }{
+		{"custom", "cloud", "https://models.example/v1"},
+		{"local", "local", "http://127.0.0.1:8081/v1"},
+	} {
+		t.Run(provider.adapter, func(t *testing.T) {
+			connection := jsonObject(t, a.call("POST", "/v1/connections", fmt.Sprintf(
+				`{"name":%q,"adapter":%q,"location_kind":%q,"base_url":%q,"enabled":false}`,
+				"My "+provider.adapter+" endpoint", provider.adapter, provider.location, provider.url), 201))
+			model := jsonObject(t, a.call("POST", "/v1/models", fmt.Sprintf(
+				`{"name":%q,"publisher":"self","task":"llm"}`, "my-model-"+provider.adapter), 201))
+			deployment := jsonObject(t, a.call("POST", "/v1/deployments", fmt.Sprintf(
+				`{"name":%q,"model_id":%.0f,"connection_id":%.0f,"upstream_model_id":"my-model","enabled":false}`,
+				"My "+provider.adapter+" deployment", model["id"], connection["id"]), 201))
+			if deployment["connection_id"] != float64(index+1) || deployment["enabled"] != false {
+				t.Fatalf("custom/local deployment was not saved: %#v", deployment)
+			}
+		})
+	}
+}
