@@ -1,14 +1,23 @@
 import sqlite3
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
 
 class SchemaTest(unittest.TestCase):
     def setUp(self):
-        self.db = sqlite3.connect(':memory:')
+        temporary = tempfile.TemporaryDirectory(prefix='voice-cloud-schema-')
+        self.addCleanup(temporary.cleanup)
+        path = Path(temporary.name) / 'router.db'
+        subprocess.run(
+            ['make', 'db-up', f'DB_PATH={path}'],
+            cwd=Path(__file__).resolve().parent.parent,
+            capture_output=True, text=True, check=True,
+        )
+        self.db = sqlite3.connect(path)
         self.addCleanup(self.db.close)
         self.db.execute('PRAGMA foreign_keys = ON')
-        self.db.executescript(Path(__file__).with_name('schema.sql').read_text())
         self.db.executescript("""
             INSERT INTO connections (id, name, adapter, location_kind, base_url)
             VALUES (1, 'Local', 'whisper', 'local', 'http://localhost:9000');

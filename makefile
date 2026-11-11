@@ -16,7 +16,7 @@ help:
 	  'make db-version                 Show the current migration version' \
 	  'make db-shell                   Open SQLite with foreign keys enabled' \
 	  'make db-backup BACKUP=copy.db    Back up the database to a new file' \
-	  'make db-check                   Validate migrations and run database tests' \
+	  'make db-check                   Test migrations, queries, and Go generation' \
 	  'Override the database with DB_PATH=/path/to/database.db'
 
 db-generate:

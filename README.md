@@ -33,13 +33,16 @@ make db-backup BACKUP=/tmp/voice-cloud-backup.db
 ```
 
 Fill in both the `-- +goose Up` and `-- +goose Down` sections of new migrations
-in `db/migrations/`, and update `db/schema.sql` to reflect the resulting schema.
+in `db/migrations/`. Migrations are the schema source for both Goose and sqlc.
 Never edit a migration that has already been applied; add another migration.
-`make db-check` checks the migrated schema against `db/schema.sql` and exercises
-rollback and reapplication using a temporary database.
+`make db-check` tests rollback, reapplication, generated SQL, and Go code generation
+using temporary databases. It also compiles the generated Go package.
 
-Add named queries to `db/queries.sql` before running `make db-generate`;
-sqlc cannot generate code from the currently empty query file.
+Queries live in `db/query.sql`; run `make db-generate` after changing queries or
+migrations. Generated files live in the `voice-cloud/db` Go module under `db/`.
+The query layer provides configuration CRUD, policy candidates, API-key validation
+and revocation, idempotency lookup, request/attempt lifecycle, and usage tracking.
+Callers must validate routing capabilities and use transactions for multi-step changes.
 `make db-down` rolls back one migration and can delete data, including all router
 tables when rolling back the initial migration. Back up first when needed.
 Runtime connections must enable foreign keys and configure WAL separately.
