@@ -46,3 +46,18 @@ Callers must validate routing capabilities and use transactions for multi-step c
 `make db-down` rolls back one migration and can delete data, including all router
 tables when rolling back the initial migration. Back up first when needed.
 Runtime connections must enable foreign keys and configure WAL separately.
+
+## Run the Go API
+
+```sh
+export ADMIN_TOKEN="$(openssl rand -hex 32)"
+make api-run
+```
+
+The API defaults to `127.0.0.1:8080`, applies migrations before starting, and
+supports configuration management, router-key minting/revocation, and read-only
+request history. All `/v1/` endpoints require the admin bearer token.
+Provider inference and streaming are not implemented yet.
+
+Run `make api-check` for integration tests with race detection. See
+[the API guide](docs/api.md) for routes, request formats, and curl examples.

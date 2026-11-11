@@ -1,13 +1,16 @@
 .DEFAULT_GOAL := help
 
 DB_PATH ?= data/voice-cloud.db
+API_ADDR ?= 127.0.0.1:8080
 MIGRATIONS_DIR := db/migrations
 GOOSE := goose -env=none -dir "$(MIGRATIONS_DIR)" sqlite3 "$(DB_PATH)"
 
-.PHONY: help db-generate db-new db-up db-down db-status db-version db-shell db-backup db-check
+.PHONY: help api-run api-check db-generate db-new db-up db-down db-status db-version db-shell db-backup db-check
 
 help:
 	@printf '%s\n' \
+	  'make api-run                    Migrate and run the API (ADMIN_TOKEN required)' \
+	  'make api-check                  Run API integration tests with race detection' \
 	  'make db-generate                Generate Go code from SQL queries (sqlc)' \
 	  'make db-new NAME=add_feature    Create a SQL migration (Goose)' \
 	  'make db-up                      Apply pending migrations' \
@@ -21,6 +24,12 @@ help:
 
 db-generate:
 	sqlc generate
+
+api-run: db-up
+	DB_PATH="$(abspath $(DB_PATH))" API_ADDR="$(API_ADDR)" go -C apps/api run .
+
+api-check:
+	go -C apps/api test -race ./...
 
 db-new:
 	@test -n "$(NAME)" || { echo 'Usage: make db-new NAME=add_feature'; exit 1; }
