@@ -12,11 +12,13 @@ import (
 type Querier interface {
 	AddDeploymentLanguage(ctx context.Context, arg AddDeploymentLanguageParams) error
 	ConsumeUserToken(ctx context.Context, arg ConsumeUserTokenParams) (UserToken, error)
+	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateAttempt(ctx context.Context, arg CreateAttemptParams) (Attempt, error)
 	CreateAttemptUsage(ctx context.Context, arg CreateAttemptUsageParams) (AttemptUsage, error)
 	CreateConnection(ctx context.Context, arg CreateConnectionParams) (Connection, error)
 	CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (Deployment, error)
+	CreateInitialUser(ctx context.Context, arg CreateInitialUserParams) (User, error)
 	CreateModel(ctx context.Context, arg CreateModelParams) (Model, error)
 	CreateRequest(ctx context.Context, arg CreateRequestParams) (Request, error)
 	CreateRoutingPolicy(ctx context.Context, arg CreateRoutingPolicyParams) (RoutingPolicy, error)

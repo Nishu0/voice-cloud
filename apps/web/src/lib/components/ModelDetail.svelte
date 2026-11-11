@@ -1,206 +1,147 @@
 <script lang="ts">
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import InfoTip from './InfoTip.svelte';
-	import Copy from 'phosphor-svelte/lib/Copy';
+	import EmptyState from './EmptyState.svelte';
 	import { toast } from 'svelte-sonner';
-	import { models, benchmarkAxes, benchmarkScores, type Model } from '#lib/fixtures.js';
-
-	let { model, open = $bindable(false) }: { model: Model; open?: boolean } = $props();
-	const axis = $derived(benchmarkAxes[model.task]);
-	const score = $derived(benchmarkScores[model.id]);
-	const peers = $derived(
-		models
-			.filter((peer) => peer.task === model.task)
-			.sort((a, b) =>
-				axis.lowerIsBetter
-					? benchmarkScores[a.id] - benchmarkScores[b.id]
-					: benchmarkScores[b.id] - benchmarkScores[a.id],
-			),
+	import type { Model, Configuration, Health, Language } from '#lib/api-types.js';
+	let {
+		model,
+		configuration,
+		health,
+		languages,
+		open = $bindable(false),
+	}: {
+		model: Model;
+		configuration: Configuration;
+		health: Record<number, Health>;
+		languages: Record<number, Language[]>;
+		open?: boolean;
+	} = $props();
+	const deployments = $derived(
+		configuration.deployments.filter((deployment) => deployment.model_id === model.id),
 	);
-	const rank = $derived(peers.findIndex((peer) => peer.id === model.id) + 1);
-	const maxScore = $derived(Math.max(...peers.map((peer) => benchmarkScores[peer.id])));
-	const regions = $derived(model.location === 'Local' ? ['local'] : ['us-east-1', 'eu-central-1']);
-	const price = $derived(model.price === 0 ? 'Self-hosted' : `$${model.price.toFixed(4)}`);
+	const tags = $derived([
+		...new Set(
+			deployments.flatMap((deployment) =>
+				(languages[deployment.id] ?? []).map((language) => language.language_tag),
+			),
+		),
+	]);
 	async function copyId() {
 		try {
-			await navigator.clipboard.writeText(model.id);
+			await navigator.clipboard.writeText(String(model.id));
 			toast.success('Model ID copied');
 		} catch {
-			toast.error('Clipboard unavailable. Select and copy the model ID.');
+			toast.error('Clipboard unavailable');
 		}
 	}
 </script>
 
-<Dialog.Root bind:open>
-	<Dialog.Content
+<Dialog.Root bind:open
+	><Dialog.Content
 		class="model-dialog flex max-h-[90svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]"
 	>
-		<Dialog.Header class="model-heading">
-			<div class="flex min-w-0 items-center gap-3 pr-6">
-				<span class="model-avatar">{model.mark}</span>
+		<Dialog.Header class="model-heading"
+			><div class="flex items-center gap-3 pr-6">
+				<span class="model-avatar">{model.publisher.slice(0, 2)}</span>
 				<div class="min-w-0">
-					<div class="eyebrow">{model.provider} / {model.task.toUpperCase()}</div>
-					<Dialog.Title class="break-words">{model.id}</Dialog.Title>
+					<div class="eyebrow">{model.publisher} / {model.task.toUpperCase()}</div>
+					<Dialog.Title class="break-words">{model.name}</Dialog.Title>
 				</div>
 			</div>
 			<Dialog.Description class="sr-only"
-				>Model specifications and illustrative benchmark evidence.</Dialog.Description
-			>
-		</Dialog.Header>
+				>Model configuration and deployment health</Dialog.Description
+			></Dialog.Header
+		>
 		<div class="model-scroll">
 			<div class="model-summary">
-				<div>
-					<div class="summary-label">
-						{axis.label}<InfoTip text={axis.reading} label="About benchmark score" />
-					</div>
-					<strong>{score}<small>{axis.unit}</small></strong><span>English · sample</span>
-				</div>
-				<div>
-					<div class="summary-label">
-						Benchmark rank<InfoTip
-							text="Rank among the sample models for this task, using the English benchmark score."
-						/>
-					</div>
-					<strong>#{rank}</strong><span>of {peers.length} models</span>
-				</div>
-				<div>
-					<div class="summary-label">
-						Price<InfoTip
-							text={model.price === 0
-								? 'Provider fee excluded. Your infrastructure costs still apply.'
-								: 'Illustrative price, not a current provider quote.'}
-						/>
-					</div>
-					<strong class:local-price={model.price === 0}>{price}</strong><span
-						>{model.price === 0 ? 'Infrastructure costs apply' : `/ ${model.unit}`}</span
+				{#each [{ label: 'Deployments', value: deployments.length }, { label: 'Enabled', value: deployments.filter((d) => d.enabled).length }, { label: 'Languages', value: tags.length }, { label: 'Healthy probes', value: deployments.filter((d) => health[d.id]?.status === 'healthy').length }] as metric}<div
 					>
-				</div>
-				<div>
-					<div class="summary-label">
-						Deployment<InfoTip
-							text="Example configuration only. No real provider connection or deployment has been created."
-						/>
-					</div>
-					<Badge variant="outline">{model.location}</Badge><span
-						>{regions.length} {model.location === 'Local' ? 'instance' : 'sample regions'}</span
-					>
-				</div>
+						<div class="summary-label">{metric.label}</div>
+						<strong>{metric.value}</strong>
+					</div>{/each}
 			</div>
 			<section class="model-specs">
 				<div>
 					<h2 class="flex items-center gap-1">
-						Benchmark<InfoTip text={axis.reading} label="Benchmark reading" />
-					</h2>
-					<div class="benchmark-number">{score}<span>{axis.unit}</span></div>
-					<div class="eyebrow">
-						{axis.lowerIsBetter ? '↓ LOWER IS BETTER' : '↑ HIGHER IS BETTER'}
-					</div>
-					<div class="flex items-center gap-1 mt-3">
-						<Badge variant="outline">Sample evidence</Badge><InfoTip
-							text="Synthetic metrics for UI review. These are not measured benchmarks or provider claims."
-							label="About sample evidence"
+						Benchmarks<InfoTip
+							text="The backend does not store benchmark scores or quality rankings yet."
 						/>
-					</div>
+					</h2>
+					<div class="benchmark-number">—</div>
+					<span class="eyebrow">NO EVIDENCE</span>
 				</div>
 				<dl class="model-spec-list">
-					<div>
-						<dt>Model ID</dt>
-						<dd class="select-all">{model.id}</dd>
-					</div>
-					<div>
-						<dt>Provider</dt>
-						<dd>{model.provider}</dd>
-					</div>
-					<div>
-						<dt>Languages</dt>
-						<dd>{model.languages.join(', ')}</dd>
-					</div>
-					<div>
-						<dt>First byte</dt>
-						<dd>{model.latency} ms</dd>
-					</div>
-					<div>
-						<dt>Price</dt>
-						<dd>{price}{model.price > 0 ? ` / ${model.unit}` : ''}</dd>
-					</div>
-					<div>
-						<dt>Example regions</dt>
-						<dd>{regions.join(', ')}</dd>
-					</div>
-					<div>
-						<dt>Capabilities</dt>
-						<dd>{model.capabilities.join(', ')}</dd>
-					</div>
-				</dl>
-			</section>
-			<section class="model-section">
-				<div class="section-heading">
-					<h2>Language metrics & evidence</h2>
-					<span class="eyebrow">ENGLISH</span>
-				</div>
-				<dl class="evidence-list">
-					<div>
-						<dt>{axis.label}</dt>
-						<dd>{score} {axis.unit}</dd>
-					</div>
-					<div>
-						<dt>Evaluation samples</dt>
-						<dd>{axis.samples.toLocaleString()}</dd>
-					</div>
-				</dl>
-				<details class="axis-evidence">
-					<summary>All axis evidence</summary>
-					<div class="table-wrap">
-						<table class="data-table">
-							<thead><tr><th>Axis</th><th>Value</th><th>Source</th></tr></thead><tbody
-								><tr><td>{axis.label}</td><td>{score} {axis.unit}</td><td>UI fixture</td></tr><tr
-									><td>First byte</td><td>{model.latency} ms</td><td>UI fixture</td></tr
-								><tr
-									><td>Evaluation samples</td><td>{axis.samples.toLocaleString()}</td><td
-										>UI fixture</td
-									></tr
-								></tbody
-							>
-						</table>
-					</div>
-				</details>
-			</section>
-			<section class="model-section">
-				<div class="section-heading">
-					<h2>Models on this axis</h2>
-					<span class="eyebrow">{axis.label} {axis.lowerIsBetter ? '↓' : '↑'}</span>
-				</div>
-				<div class="comparison-list">
-					{#each peers as peer}<div
-							class="comparison-row"
-							class:current-model={peer.id === model.id}
+					{#each [{ label: 'Model ID', value: model.id }, { label: 'Name', value: model.name }, { label: 'Publisher', value: model.publisher }, { label: 'Task', value: model.task.toUpperCase() }, { label: 'Version', value: model.version || '—' }, { label: 'Languages', value: tags.join(', ') || '—' }] as item}<div
 						>
-							<span class="comparison-name"
-								>{peer.provider.toLowerCase()} / {peer.id}{peer.id === model.id ? ' ←' : ''}</span
-							>
-							<div class="comparison-track" aria-hidden="true">
-								<div style={`width:${(benchmarkScores[peer.id] / maxScore) * 100}%`}></div>
-							</div>
-							<span class="comparison-score">{benchmarkScores[peer.id]}</span>
+							<dt>{item.label}</dt>
+							<dd>{item.value}</dd>
 						</div>{/each}
+				</dl>
+			</section>
+			<section class="model-section">
+				<div class="section-heading">
+					<h2>Deployments</h2>
+					<InfoTip
+						text="Probe latency measures endpoint reachability, not model inference latency."
+					/>
 				</div>
+				{#each deployments as deployment}<div class="panel mb-3">
+						<div class="panel-heading">
+							<h2>{deployment.name}</h2>
+							<span class={health[deployment.id]?.status === 'healthy' ? 'positive' : 'muted'}
+								>{health[deployment.id]?.status ?? 'unknown'}</span
+							>
+						</div>
+						<div class="panel-body">
+							<dl class="detail-list">
+								<dt>Provider</dt>
+								<dd>
+									{configuration.connections.find((c) => c.id === deployment.connection_id)?.name ??
+										'—'}
+								</dd>
+								<dt>Upstream ID</dt>
+								<dd>{deployment.upstream_model_id}</dd>
+								<dt>Probe latency</dt>
+								<dd>{health[deployment.id]?.latency_ms ?? '—'} ms</dd>
+								<dt>Probe result</dt>
+								<dd>{health[deployment.id]?.error_code ?? 'checked'}</dd>
+								<dt>Enabled</dt>
+								<dd>{deployment.enabled ? 'yes' : 'no'}</dd>
+							</dl>
+							{#each ['capabilities_json', 'pricing_json', 'settings_json'] as key}<details
+									class="axis-evidence"
+								>
+									<summary>{key.replace('_json', '')}</summary>
+									<pre class="overflow-x-auto text-[10px]">{JSON.stringify(
+											deployment[key as 'capabilities_json' | 'pricing_json' | 'settings_json'],
+											null,
+											2,
+										)}</pre>
+								</details>{/each}
+						</div>
+					</div>{:else}<EmptyState
+						title="No deployments"
+						description="Create a deployment for this model."
+						href="/manage/deployments"
+						action="Deployments"
+					/>{/each}
 			</section>
 		</div>
 		<Dialog.Footer class="model-footer"
-			><span class="eyebrow mr-auto">SAMPLE DATA</span><Button
+			><span class="eyebrow mr-auto">MODEL #{model.id}</span><Button
 				variant="outline"
 				size="sm"
-				onclick={copyId}><Copy data-icon="inline-start" />Copy ID</Button
+				onclick={copyId}>Copy ID</Button
 			><Button variant="outline" size="sm" onclick={() => (open = false)}>Close</Button
 			></Dialog.Footer
-		>
-	</Dialog.Content>
-</Dialog.Root>
+		></Dialog.Content
+	></Dialog.Root
+>
 
 <style>
-	.model-heading {
+	:global(.model-heading) {
 		padding: 16px;
 		border-bottom: 1px solid var(--border);
 	}
@@ -231,9 +172,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
 		gap: 4px;
-		text-align: center;
 		padding: 10px 6px;
 		border-right: 1px solid var(--border);
 	}
@@ -241,9 +180,6 @@
 		border-right: 0;
 	}
 	.summary-label {
-		display: flex;
-		gap: 2px;
-		align-items: center;
 		font-size: 9px;
 		color: var(--muted-foreground);
 	}
@@ -251,21 +187,6 @@
 		font-size: 22px;
 		font-weight: 500;
 		letter-spacing: -1px;
-		line-height: 1.4;
-	}
-	.model-summary strong small {
-		font-size: 10px;
-		color: var(--muted-foreground);
-		margin-left: 3px;
-		letter-spacing: 0;
-	}
-	.model-summary strong.local-price {
-		font-size: 15px;
-		letter-spacing: -0.5px;
-	}
-	.model-summary > div > span {
-		font-size: 9px;
-		color: var(--muted-foreground);
 	}
 	.model-specs {
 		display: grid;
@@ -276,15 +197,7 @@
 	}
 	.benchmark-number {
 		font-size: 36px;
-		letter-spacing: -2px;
-		line-height: 1.5;
 		margin-top: 4px;
-	}
-	.benchmark-number > span {
-		font-size: 14px;
-		letter-spacing: 0;
-		margin-left: 4px;
-		color: var(--muted-foreground);
 	}
 	.model-spec-list > div {
 		display: grid;
@@ -294,14 +207,7 @@
 		border-bottom: 1px solid var(--border);
 		font-size: 10px;
 	}
-	.model-spec-list > div:first-child {
-		padding-top: 0;
-	}
-	.model-spec-list > div:last-child {
-		border-bottom: 0;
-	}
-	.model-spec-list dt,
-	.evidence-list dt {
+	.model-spec-list dt {
 		color: var(--muted-foreground);
 	}
 	.model-spec-list dd {
@@ -309,22 +215,7 @@
 		overflow-wrap: anywhere;
 	}
 	.model-section {
-		padding: 16px 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.model-section:last-child {
-		padding-bottom: 0;
-		border-bottom: 0;
-	}
-	.evidence-list {
-		max-width: 380px;
-	}
-	.evidence-list > div {
-		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-		font-size: 11px;
-		padding: 7px 0;
+		padding-top: 16px;
 	}
 	.axis-evidence {
 		margin-top: 10px;
@@ -334,42 +225,7 @@
 		color: var(--muted-foreground);
 		margin-bottom: 8px;
 	}
-	.comparison-list {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding-top: 4px;
-	}
-	.comparison-row {
-		display: grid;
-		grid-template-columns: minmax(0, 1.1fr) minmax(40px, 1fr) 40px;
-		align-items: center;
-		gap: 12px;
-		font-size: 10px;
-		color: var(--muted-foreground);
-	}
-	.comparison-name {
-		overflow-wrap: anywhere;
-	}
-	.comparison-score {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-	}
-	.comparison-track {
-		height: 4px;
-		background: var(--muted);
-	}
-	.comparison-track > div {
-		height: 100%;
-		background: var(--muted-foreground);
-	}
-	.current-model {
-		color: var(--success);
-	}
-	.current-model .comparison-track > div {
-		background: var(--success);
-	}
-	.model-footer {
+	:global(.model-footer) {
 		padding: 12px 16px;
 		border-top: 1px solid var(--border);
 		background: var(--card);
@@ -378,9 +234,6 @@
 		gap: 6px;
 	}
 	@media (max-width: 600px) {
-		.model-heading {
-			padding: 12px;
-		}
 		.model-scroll {
 			padding: 12px;
 		}
@@ -397,20 +250,6 @@
 			grid-template-columns: 1fr;
 			gap: 16px;
 			padding: 14px 0;
-		}
-		.model-specs > div:first-child {
-			display: none;
-		}
-		.comparison-row {
-			grid-template-columns: minmax(0, 1.3fr) minmax(32px, 0.7fr) 32px;
-			gap: 8px;
-			font-size: 9px;
-		}
-		.model-footer {
-			padding: 10px 12px;
-		}
-		.model-spec-list > div {
-			grid-template-columns: 84px minmax(0, 1fr);
 		}
 	}
 </style>

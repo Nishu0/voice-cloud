@@ -1,49 +1,36 @@
 # User accounts
 
-One self-hosted installation shares connections, models, deployments, routing
-policies, keys, and request history. Users have installation-wide `admin` or
-`member` roles. There are no organizations, workspaces, memberships, or billing
-tables.
+One shared installation uses admin/member roles. On first startup, open the web
+console and enter your name, email, and password. This creates the initial admin
+and signs you in. The initial signup endpoint closes afterward; admins add members
+from Account settings. Email addresses are trimmed and lowercased. Passwords must
+contain 12–1024 bytes; the browser requires at least 12 characters.
 
-Migration `00002_users.sql` adds:
+Passwords use PBKDF2-HMAC-SHA256 with 600,000 iterations and a random 16-byte salt.
+Only encoded hashes are stored. No default password or user is seeded. Signup and
+session creation use one transaction; a guarded INSERT allows just one first user.
 
-| Table | Purpose |
-| --- | --- |
-| `users` | Unique email, display name, password hash, role, active/disabled status, email verification timestamp |
-| `user_sessions` | User-owned session token hashes, creation/expiry timestamps, revocation |
-| `user_tokens` | Expiring single-use token hashes for password reset or email verification |
+Random 256-bit session tokens are stored as SHA-256 hashes in `user_sessions`.
+Tokens expire after seven days, survive service restarts, and are revoked on logout.
+Disabled users and expired/revoked sessions cannot authenticate. Authentication
+attempts are limited to 20 per minute per backend remote address, including the
+web server's shared address. The rate limit is in memory and resets on restart.
+Passwords, password hashes, and raw session tokens are never returned by account
+reads. Signup/login return raw tokens only for the client to establish a session.
 
-Email uniqueness is case-insensitive for ASCII through SQLite's NOCASE collation.
-The future authentication layer must validate and normalize email addresses and
-store encoded password hashes, never plaintext passwords. `ListUsers` deliberately
-excludes password hashes; credential lookups remain internal and must not be
-serialized into public responses.
+The web server keeps the session in an HttpOnly, SameSite=Lax cookie, with Secure
+on HTTPS. It forwards bearer authentication to Go; no management token is shipped
+in browser assets. Set the public `ORIGIN` correctly when deploying behind HTTPS.
 
-Session and action-token hashes are 64 lowercase hexadecimal characters, intended
-for SHA-256 hashes of cryptographically random tokens. Raw tokens belong with the
-client, not in SQLite. Expiry is exclusive: a token is invalid at `expires_at`.
-Active-session lookup excludes revoked, expired, not-yet-valid, and disabled-user
-sessions. Action-token consumption performs a guarded UPDATE/RETURNING so a token
-can be used once, for its intended purpose, while its user is active.
+Admins manage all router configuration and can create member accounts. Members
+can read shared configuration/history and change their own display name. API key
+creator IDs are attribution, not ownership; keys remain installation-wide.
+Optional legacy `ADMIN_TOKEN` access remains available for existing scripts but
+is not required. The frontend never uses it.
 
-`api_keys.created_by_user_id` records who created a router key. It is attribution,
-not ownership or an access boundary. Existing/bootstrap keys have NULL creators;
-the current admin-token API still creates such keys. Deleting a user removes
-their sessions and action tokens, clears key attribution, and preserves router
-keys and request history. Disabling a user blocks user sessions; shared router
-keys remain valid until explicitly revoked.
+`user_tokens` already reserves one-use verification/reset tokens, but email
+verification, password resets, password changes, invitations, MFA, and account
+role/status management are not implemented. Emails are not verified or delivered.
 
-The authentication layer must use transactions to consume a reset token, update
-the password, and delete the user's sessions/remaining reset tokens together.
-Disabling an account should also delete its sessions so re-enabling it does not
-reactivate old sessions. Last-admin protection and role enforcement belong in
-that layer and are not provided by these tables alone.
-
-Run `make db-up` to apply the migration and `make db-generate` after query changes.
-No user or default password is seeded. Login, logout, account-management routes,
-email delivery, and authorization enforcement are not implemented yet; the API
-continues to use `ADMIN_TOKEN`. Models for invitations, SSO, MFA, or billing can be
-added when those features are selected.
-
-Rolling back this migration drops account/session/token data and creator
-attribution, while keeping the original router configuration and history.
+Run `make db-up`, `make db-generate`, and `make api-check` for schema/codegen/auth
+validation. The existing user/session migration is reused; no new tables needed.

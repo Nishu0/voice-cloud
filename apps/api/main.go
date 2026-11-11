@@ -16,7 +16,7 @@ import (
 
 func run(ctx context.Context) error {
 	token := os.Getenv("ADMIN_TOKEN")
-	if len(strings.TrimSpace(token)) < 32 {
+	if token != "" && len(strings.TrimSpace(token)) < 32 {
 		return errors.New("ADMIN_TOKEN must contain at least 32 characters")
 	}
 	path := os.Getenv("DB_PATH")

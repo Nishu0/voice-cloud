@@ -54,6 +54,17 @@ func (q *Queries) ConsumeUserToken(ctx context.Context, arg ConsumeUserTokenPara
 	return i, err
 }
 
+const countUsers = `-- name: CountUsers :one
+SELECT count(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
 INSERT INTO api_keys (name, key_hash, key_prefix, default_policy_id, expires_at, created_by_user_id)
 VALUES (?, ?, ?, ?, ?, ?) RETURNING id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at, created_by_user_id
@@ -254,6 +265,34 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		&i.CapabilitiesJson,
 		&i.PricingJson,
 		&i.SettingsJson,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createInitialUser = `-- name: CreateInitialUser :one
+INSERT INTO users (email, name, password_hash, role)
+SELECT ?, ?, ?, 'admin' WHERE NOT EXISTS (SELECT 1 FROM users) RETURNING id, email, name, password_hash, role, status, email_verified_at, created_at, updated_at
+`
+
+type CreateInitialUserParams struct {
+	Email        string `json:"email"`
+	Name         string `json:"name"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) CreateInitialUser(ctx context.Context, arg CreateInitialUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createInitialUser, arg.Email, arg.Name, arg.PasswordHash)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -38,7 +38,14 @@ func newHandler(database *sql.DB, adminToken string) http.Handler {
 	admin.HandleFunc("GET /v1/requests/{request}", handle(a.requests))
 	admin.HandleFunc("GET /v1/requests/{request}/attempts", handle(a.requestAttempts))
 	admin.HandleFunc("GET /v1/requests/{request}/usage", handle(a.requestUsage))
+	admin.HandleFunc("GET /v1/auth/me", handle(a.currentUser))
+	admin.HandleFunc("PUT /v1/auth/me", handle(a.currentUser))
+	admin.HandleFunc("POST /v1/auth/logout", handle(a.logout))
+	admin.HandleFunc("POST /v1/users", handle(a.addUser))
 	root := http.NewServeMux()
+	root.HandleFunc("GET /v1/auth/status", handle(a.authStatus))
+	root.HandleFunc("POST /v1/auth/signup", handle(a.signup))
+	root.HandleFunc("POST /v1/auth/login", handle(a.login))
 	root.HandleFunc("GET /healthz", handle(func(w http.ResponseWriter, r *http.Request) error {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
@@ -47,6 +54,6 @@ func newHandler(database *sql.DB, adminToken string) http.Handler {
 		}
 		return send(w, http.StatusOK, map[string]string{"status": "ok"})
 	}))
-	root.Handle("/", authenticate(adminToken, admin))
+	root.Handle("/", a.authenticateUser(adminToken, admin))
 	return root
 }

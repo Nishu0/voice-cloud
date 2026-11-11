@@ -5,8 +5,7 @@ if (( $# )); then
     exec "$@"
 fi
 
-: "${ADMIN_TOKEN:?ADMIN_TOKEN is required}"
-if (( ${#ADMIN_TOKEN} < 32 )); then
+if [[ -n "${ADMIN_TOKEN:-}" ]] && (( ${#ADMIN_TOKEN} < 32 )); then
     echo 'ADMIN_TOKEN must contain at least 32 characters' >&2
     exit 1
 fi

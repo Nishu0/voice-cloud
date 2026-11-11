@@ -1,169 +1,195 @@
 <script lang="ts">
-	import InfoTip from '#lib/components/InfoTip.svelte';
+	import type { PageProps } from './$types';
+	import { enhance, applyAction } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import InfoTip from '#lib/components/InfoTip.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Field from '#lib/components/ui/field/index.js';
-	import { usePreview, type PreviewKey } from '#lib/preview.svelte.js';
 	import { toast } from 'svelte-sonner';
-	const preview = usePreview();
+	let { data, form }: PageProps = $props();
 	let open = $state(false),
-		name = $state(''),
-		expiry = $state('30 days'),
+		revoke = $state<number | null>(null),
+		busy = $state(false),
 		token = $state(''),
-		error = $state('');
-	let revoke = $state<PreviewKey | null>(null),
-		revokeOpen = $state(false);
-	function create(event: SubmitEvent) {
-		event.preventDefault();
-		if (!name.trim()) {
-			error = 'Give this key a name.';
-			return;
-		}
-		const id = crypto.randomUUID().replaceAll('-', '');
-		token = `vc_demo_not_valid_${id}`;
-		preview.keys.push({
-			id,
-			name: name.trim(),
-			prefix: token.slice(0, 24),
-			expiry,
-			revoked: false,
-		});
-		error = '';
-		toast.success('Demo key created locally');
-	}
+		issue = $state('');
 	function start() {
-		name = '';
 		token = '';
-		error = '';
+		issue = '';
 		open = true;
 	}
 	async function copy() {
 		try {
 			await navigator.clipboard.writeText(token);
-			toast.success('Demo key copied');
+			toast.success('Key copied');
 		} catch {
-			toast.error('Clipboard unavailable. Select and copy the key.');
+			toast.error('Clipboard unavailable');
 		}
 	}
 </script>
 
-<PageHeader title="API keys" path="connect / api keys" description="Manage access to your router."
-	>{#snippet actions()}<Button size="sm" onclick={start}>Create API key +</Button
-		>{/snippet}</PageHeader
+<PageHeader
+	title="API keys"
+	path="connect / api keys"
+	description="Installation-wide router keys. Store secrets on your server."
+	>{#snippet actions()}{#if data.user?.role === 'admin'}<Button size="sm" onclick={start}
+				>Create API key +</Button
+			>{/if}{/snippet}</PageHeader
 >
-
-<section class="section">
-	<div class="section-heading">
-		<h2>Application keys <span class="muted">/ {preview.keys.length}</span></h2>
-		<div class="flex items-center gap-1">
-			<Badge variant="outline">Demo</Badge><InfoTip
-				label="About API keys"
-				text="Installation-wide keys. Demo changes last until reload. Keep real keys on your server; never expose them in frontend code."
+{#if form?.error}<p class="negative mb-3" role="alert">{form.error}</p>{/if}
+{#if data.keys.length}<div class="panel">
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead
+					><tr
+						><th>Name</th><th>Prefix</th><th>Policy</th><th>Expires</th><th>Status</th><th></th></tr
+					></thead
+				><tbody
+					>{#each data.keys as key}<tr
+							><td>{key.name}</td><td class="muted">{key.key_prefix}...</td><td
+								>{data.policies.find((p) => p.id === key.default_policy_id)?.name ?? '—'}</td
+							><td
+								>{key.expires_at
+									? new Date(key.expires_at).toISOString().slice(0, 10)
+									: 'Never'}</td
+							><td class={key.revoked_at ? 'muted' : 'positive'}
+								>{key.revoked_at
+									? 'revoked'
+									: key.expires_at && key.expires_at <= Date.now()
+										? 'expired'
+										: 'active'}</td
+							><td
+								>{#if data.user?.role === 'admin'}<Button
+										variant="destructive"
+										size="xs"
+										disabled={!!key.revoked_at}
+										onclick={() => (revoke = key.id)}>Revoke</Button
+									>{/if}</td
+							></tr
+						>{/each}</tbody
+				>
+			</table>
+		</div>
+		<div class="table-footer">
+			<span>{data.keys.length} keys</span><InfoTip
+				text="Secrets are shown only when created. Revoking a key preserves its history."
 			/>
 		</div>
-	</div>
-	{#if preview.keys.length}<div class="panel">
-			<div class="table-wrap">
-				<table class="data-table">
-					<thead
-						><tr><th>Name</th><th>Key prefix</th><th>Expires in</th><th>Status</th><th></th></tr
-						></thead
-					><tbody
-						>{#each preview.keys as key}<tr
-								><td>{key.name}</td><td class="muted">{key.prefix}...</td><td>{key.expiry}</td><td
-									class={key.revoked ? 'muted' : 'positive'}
-									>{key.revoked ? 'revoked' : 'active · demo'}</td
-								><td
-									><Button
-										size="xs"
-										variant="destructive"
-										disabled={key.revoked}
-										onclick={() => {
-											revoke = key;
-											revokeOpen = true;
-										}}>Revoke</Button
-									></td
-								></tr
-							>{/each}</tbody
-					>
-				</table>
-			</div>
-			<div class="table-footer">
-				<span>{preview.keys.filter((k) => !k.revoked).length} active demo keys</span><span
-					>Cleared on reload</span
-				>
-			</div>
-		</div>{:else}<EmptyState
-			title="No API keys yet"
-			description="Demo keys cannot authenticate requests."
-			><Button size="sm" onclick={start}>Create API key +</Button></EmptyState
-		>{/if}
-</section>
-
-<Dialog.Root bind:open
+	</div>{:else}<EmptyState
+		title="No API keys"
+		description="Create a key for your application."
+	/>{/if}
+<Dialog.Root
+	bind:open
+	onOpenChange={() => {
+		token = '';
+		issue = '';
+	}}
 	><Dialog.Content
 		><Dialog.Header
-			><Dialog.Title>{token ? 'Save your demo key' : 'Create API key'}</Dialog.Title
-			><Dialog.Description
-				>{token ? 'Shown once. Copy it now.' : 'Demo key · no API access.'}</Dialog.Description
+			><Dialog.Title>{token ? 'Save your key' : 'Create API key'}</Dialog.Title><Dialog.Description
+				>{token ? 'Shown once. Copy it now.' : 'Router access only.'}</Dialog.Description
 			></Dialog.Header
-		>{#if token}<div class="flex flex-col gap-3">
-				<label for="new-token" class="muted text-[10px]">DEMO KEY</label><Input
-					id="new-token"
-					readonly
-					value={token}
-				/><Button variant="outline" onclick={copy}>Copy demo key</Button><Button
-					onclick={() => {
-						open = false;
-						token = '';
-					}}>I have saved it</Button
-				>
-			</div>{:else}<form onsubmit={create}>
+		>{#if token}<Input aria-label="New API key" readonly value={token} /><Button
+				variant="outline"
+				onclick={copy}>Copy key</Button
+			><Button
+				onclick={() => {
+					token = '';
+					open = false;
+				}}>Done</Button
+			>{:else}<form
+				method="POST"
+				action="?/create"
+				use:enhance={() => {
+					busy = true;
+					issue = '';
+					return async ({ result }) => {
+						busy = false;
+						if (result.type === 'success') {
+							token = String(result.data?.key ?? '');
+							await invalidateAll();
+						} else if (result.type === 'failure') {
+							issue = String(result.data?.error ?? 'Could not create key');
+						} else await applyAction(result);
+					};
+				}}
+			>
 				<Field.Group
-					><Field.Field data-invalid={!!error}
+					><Field.Field
 						><Field.Label for="key-name">Name</Field.Label><Input
 							id="key-name"
-							placeholder="e.g. development-agent"
-							maxlength={80}
-							bind:value={name}
-							aria-invalid={!!error}
+							name="name"
 							required
-						/>{#if error}<Field.Error>{error}</Field.Error>{/if}</Field.Field
+							maxlength={100}
+						/></Field.Field
 					><Field.Field
 						><Field.Label for="expiry">Expires in</Field.Label><select
 							id="expiry"
+							name="days"
 							class="native-select"
-							bind:value={expiry}
-							><option>7 days</option><option>30 days</option><option>90 days</option></select
+							><option value="7">7 days</option><option value="30" selected>30 days</option><option
+								value="90">90 days</option
+							></select
+						></Field.Field
+					><Field.Field
+						><Field.Label for="policy">Default policy</Field.Label><select
+							id="policy"
+							name="policy"
+							class="native-select"
+							><option value="">None</option>{#each data.policies as policy}<option
+									value={policy.id}>{policy.name}</option
+								>{/each}</select
 						></Field.Field
 					></Field.Group
-				><Dialog.Footer class="mt-5"
+				>{#if issue}<p class="negative mt-3" role="alert">{issue}</p>{/if}<Dialog.Footer
+					class="mt-4"
 					><Button variant="outline" onclick={() => (open = false)}>Cancel</Button><Button
-						type="submit">Create demo key</Button
+						type="submit"
+						disabled={busy}>{busy ? 'Creating...' : 'Create key'}</Button
 					></Dialog.Footer
 				>
 			</form>{/if}</Dialog.Content
 	></Dialog.Root
 >
-<Dialog.Root bind:open={revokeOpen}
+<Dialog.Root
+	open={revoke !== null}
+	onOpenChange={(value) => {
+		if (!value) revoke = null;
+	}}
 	><Dialog.Content
 		><Dialog.Header
-			><Dialog.Title>Revoke {revoke?.name}?</Dialog.Title><Dialog.Description
-				>Revoke this demo key for this session.</Dialog.Description
+			><Dialog.Title>Revoke key?</Dialog.Title><Dialog.Description
+				>Applications using this key will lose access.</Dialog.Description
 			></Dialog.Header
-		><Dialog.Footer
-			><Button variant="outline" onclick={() => (revokeOpen = false)}>Cancel</Button><Button
-				variant="destructive"
-				onclick={() => {
-					if (revoke) revoke.revoked = true;
-					revokeOpen = false;
-					toast.success('Demo key revoked');
-				}}>Revoke key</Button
-			></Dialog.Footer
-		></Dialog.Content
+		>
+		<form
+			method="POST"
+			action="?/revoke"
+			use:enhance={() => {
+				busy = true;
+				return async ({ result, update }) => {
+					await update();
+					busy = false;
+					if (result.type === 'success') revoke = null;
+				};
+			}}
+		>
+			<input type="hidden" name="id" value={revoke ?? ''} />{#if form?.error}<p
+					class="negative mb-3"
+					role="alert"
+				>
+					{form.error}
+				</p>{/if}<Dialog.Footer
+				><Button variant="outline" onclick={() => (revoke = null)}>Cancel</Button><Button
+					variant="destructive"
+					type="submit"
+					disabled={busy}>Revoke key</Button
+				></Dialog.Footer
+			>
+		</form></Dialog.Content
 	></Dialog.Root
 >

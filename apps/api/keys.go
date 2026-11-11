@@ -66,7 +66,11 @@ func (a *api) keys(w http.ResponseWriter, r *http.Request) error {
 		}
 		token := "vc_" + hex.EncodeToString(secret)
 		hash := sha256.Sum256([]byte(token))
-		row, err := a.queries.CreateAPIKey(ctx, db.CreateAPIKeyParams{Name: body.Name, KeyHash: hex.EncodeToString(hash[:]), KeyPrefix: token[:11], DefaultPolicyID: nullableInt(body.DefaultPolicyID), ExpiresAt: nullableInt(body.ExpiresAt)})
+		creator := sql.NullInt64{}
+		if user, ok := ctx.Value(userContextKey{}).(db.User); ok {
+			creator = sql.NullInt64{Int64: user.ID, Valid: true}
+		}
+		row, err := a.queries.CreateAPIKey(ctx, db.CreateAPIKeyParams{Name: body.Name, KeyHash: hex.EncodeToString(hash[:]), KeyPrefix: token[:11], DefaultPolicyID: nullableInt(body.DefaultPolicyID), ExpiresAt: nullableInt(body.ExpiresAt), CreatedByUserID: creator})
 		return result(w, 201, map[string]any{"key": token, "api_key": keyJSON(row)}, err)
 	}
 }

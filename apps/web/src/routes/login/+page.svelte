@@ -7,16 +7,13 @@
 	import Eye from 'phosphor-svelte/lib/Eye';
 	import EyeSlash from 'phosphor-svelte/lib/EyeSlash';
 
+	import { enhance } from '$app/forms';
+	import type { PageProps } from './$types';
+	let { form }: PageProps = $props();
+	let pending = $state(false);
 	let email = $state('');
 	let password = $state('');
 	let showPassword = $state(false);
-	let message = $state('');
-
-	function signIn(event: SubmitEvent) {
-		event.preventDefault();
-		password = '';
-		message = 'Sign-in is not connected yet. Open the preview below.';
-	}
 </script>
 
 <svelte:head><title>Sign in · Voice Cloud</title></svelte:head>
@@ -32,13 +29,21 @@
 			<span class="eyebrow">~/ auth</span>
 			<div class="flex items-center gap-2">
 				<h1 id="login-title">Sign in<span class="cursor">_</span></h1>
-				<InfoTip
-					label="About sign in"
-					text="Login UI only. Credentials are not sent or stored; authentication will be connected later."
-				/>
+				<InfoTip label="About sign in" text="Use the email and password created during setup." />
 			</div>
 		</div>
-		<form method="POST" onsubmit={signIn} class="flex flex-col gap-4">
+		<form
+			method="POST"
+			use:enhance={() => {
+				pending = true;
+				return async ({ update }) => {
+					password = '';
+					await update();
+					pending = false;
+				};
+			}}
+			class="flex flex-col gap-4"
+		>
 			<Field.Group>
 				<Field.Field
 					><Field.Label for="login-email">Email</Field.Label><Input
@@ -72,14 +77,11 @@
 					</div></Field.Field
 				>
 			</Field.Group>
-			{#if message}<p class="auth-message" role="status">{message}</p>{/if}
-			<Button type="submit" class="w-full">Sign in →</Button>
-		</form>
-		<div class="auth-preview">
-			<span class="eyebrow">UI PREVIEW</span><Button href="/" variant="ghost" size="xs"
-				>Open console ↗</Button
+			{#if form?.error}<p class="auth-message" role="alert">{form.error}</p>{/if}
+			<Button type="submit" class="w-full" disabled={pending}
+				>{pending ? 'Signing in...' : 'Sign in →'}</Button
 			>
-		</div>
+		</form>
 	</section>
 	<footer class="auth-footer">self-hosted / v0.1</footer>
 </div>

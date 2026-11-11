@@ -6,14 +6,14 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	let language = $state('curl');
 	const examples: Record<string, string> = {
-		curl: '# List the models configured in your installation\ncurl http://localhost:8080/v1/models \\\n  -H "Authorization: Bearer $ADMIN_TOKEN"',
+		curl: '# List the models configured in your installation\ncurl http://localhost:8080/v1/models \\\n  -H "Authorization: Bearer $SESSION_TOKEN"',
 		python:
-			'import json\nimport os\nfrom urllib.request import Request, urlopen\n\nrequest = Request(\n    "http://localhost:8080/v1/models",\n    headers={"Authorization": f"Bearer {os.environ[\'ADMIN_TOKEN\']}"},\n)\nwith urlopen(request) as response:\n    print(json.load(response))',
+			'import json\nimport os\nfrom urllib.request import Request, urlopen\n\nrequest = Request(\n    "http://localhost:8080/v1/models",\n    headers={"Authorization": f"Bearer {os.environ[\'SESSION_TOKEN\']}"},\n)\nwith urlopen(request) as response:\n    print(json.load(response))',
 		typescript:
-			'// Run on the server; keep ADMIN_TOKEN private\nconst response = await fetch(\n  "http://localhost:8080/v1/models",\n  { headers: { Authorization: `Bearer ${process.env.ADMIN_TOKEN}` } }\n);\nif (!response.ok) throw new Error(`HTTP ${response.status}`);\nconst models = await response.json();\nconsole.log(models);',
+			'// Run on the server; keep SESSION_TOKEN private\nconst response = await fetch(\n  "http://localhost:8080/v1/models",\n  { headers: { Authorization: `Bearer ${process.env.SESSION_TOKEN}` } }\n);\nif (!response.ok) throw new Error(`HTTP ${response.status}`);\nconst models = await response.json();\nconsole.log(models);',
 	};
 	const prompt =
-		'# Voice Cloud — context for your coding agent\n\nVoice Cloud is a self-hosted voice model router.\nThe backend is Go, with SQLite and a maintenance worker.\nThe console uses Svelte, TypeScript, and shadcn-svelte.\n\nUse the management API at http://localhost:8080/v1.\nAuthenticate management requests with ADMIN_TOKEN.\nKeep all admin and provider credentials on the server.\n\nConfigure connections, models, deployments, and routing policies.\nCustom and local deployments support explicit reachability probes.\nInference endpoints and SDK integrations are not implemented yet.';
+		'# Voice Cloud — context for your coding agent\n\nVoice Cloud is a self-hosted voice model router.\nThe backend is Go, with SQLite and a maintenance worker.\nThe console uses Svelte, TypeScript, and shadcn-svelte.\n\nUse the management API at http://localhost:8080/v1.\nAuthenticate management requests with a user session token.\nKeep session and provider credentials on the server.\n\nConfigure connections, models, deployments, and routing policies.\nCustom and local deployments support explicit reachability probes.\nInference endpoints and SDK integrations are not implemented yet.';
 </script>
 
 <PageHeader
@@ -38,7 +38,7 @@
 	</section>
 	<CodeBlock
 		title="terminal / start backend"
-		code={'# From the repository root\n# Set ADMIN_TOKEN to a random value of at least 32 characters\nexport ADMIN_TOKEN="<your-private-admin-token>"\n\n# Development: API and worker in separate terminals\nmake api-run\nmake worker-run'}
+		code={'# From the repository root\n# Open the web console to create your first account\n# Development: API and worker in separate terminals\nmake api-run\nmake worker-run'}
 	/>
 </div>
 <details class="section panel">
@@ -49,7 +49,7 @@
 	<div class="section-heading">
 		<h2>Check your connection</h2>
 		<InfoTip
-			text="Server-side management API examples. Keep ADMIN_TOKEN private. Inference and SDK integrations are not available yet."
+			text="Server-side management API examples. Keep SESSION_TOKEN private. Inference and SDK integrations are not available yet."
 			label="About these examples"
 		/>
 	</div>

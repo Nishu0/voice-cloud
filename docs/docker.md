@@ -17,20 +17,19 @@ see [the worker guide](worker.md). No extra worker service or database server is
 Run from the repository root with Docker Compose v2.22+:
 
 ```sh
-export ADMIN_TOKEN="$(openssl rand -hex 32)"
 docker compose -f docker/compose.yml up --build -d
 docker compose -f docker/compose.yml logs -f backend
 ```
 
 Web: `http://localhost:3000`. API: `http://localhost:8080`; public health check:
-`http://localhost:8080/healthz`. All management endpoints require the admin bearer
-header. The token is only passed to the backend, never the frontend.
+`http://localhost:8080/healthz`. Open the web app to create the first administrator with an email and password.
+No admin token is required. Sessions and accounts persist in SQLite.
 
 Host ports bind to loopback. Use a reverse proxy with HTTPS for external access
 and set `ORIGIN` to the frontend's public origin. Backend and frontend run as
 unprivileged users. The frontend waits for the backend health check before starting.
-The current frontend is still the SvelteKit starter page; this change deploys it
-without adding application screens or browser authentication.
+The web server calls the backend over its internal `API_URL`. Browser sessions
+use HttpOnly cookies; the backend receives a session bearer token.
 
 SQLite lives at `/data/voice-cloud.db` on the named `database` volume. Ordinary
 container restarts, rebuilds, and `docker compose down` preserve it. `down -v`
@@ -69,5 +68,5 @@ docker run --rm --entrypoint python3 \
 ```
 
 This checks migration/seeding, shutdown of both child processes, propagation of a
-child failure, and token validation using a temporary database. Child executables
+child failure, and optional legacy token validation using a temporary database. Child executables
 are substituted only inside this test; production runs the Go binaries.

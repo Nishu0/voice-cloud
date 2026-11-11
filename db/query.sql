@@ -209,6 +209,13 @@ DELETE FROM attempt_usage WHERE attempt_id = ? AND metric = ?;
 INSERT INTO users (email, name, password_hash, role)
 VALUES (?, ?, ?, ?) RETURNING *;
 
+-- name: CountUsers :one
+SELECT count(*) FROM users;
+
+-- name: CreateInitialUser :one
+INSERT INTO users (email, name, password_hash, role)
+SELECT ?, ?, ?, 'admin' WHERE NOT EXISTS (SELECT 1 FROM users) RETURNING *;
+
 -- name: GetUser :one
 SELECT * FROM users WHERE id = ?;
 

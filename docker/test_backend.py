@@ -31,7 +31,7 @@ signal.pause()
 ''')
             binary.chmod(0o755)
         self.environment = dict(os.environ, PATH=f'{binary_dir}:' + os.environ['PATH'],
-                                ADMIN_TOKEN='container-test-token-at-least-32-characters',
+                                ADMIN_TOKEN='',
                                 DB_PATH=str(self.directory / 'router.db'),
                                 TEST_STATE=str(self.directory))
 

@@ -9,7 +9,7 @@ GOOSE := goose -env=none -dir "$(MIGRATIONS_DIR)" sqlite3 "$(DB_PATH)"
 
 help:
 	@printf '%s\n' \
-	  'make api-run                    Migrate and run the API (ADMIN_TOKEN required)' \
+	  'make api-run                    Migrate and run the API' \
 	  'make api-check                  Run API integration tests with race detection' \
 	  'make worker-run                 Migrate and run the background worker' \
 	  'make worker-check               Run worker integration tests with race detection' \

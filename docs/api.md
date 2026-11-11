@@ -3,24 +3,48 @@
 Run from the repository root:
 
 ```sh
-export ADMIN_TOKEN="$(openssl rand -hex 32)"
 make api-run
 ```
 
-`make api-run` applies migrations and starts the server at `127.0.0.1:8080`.
-Override the address with `API_ADDR=127.0.0.1:9000` and the database with
-`DB_PATH=/path/to/router.db`. Running the Go binary directly requires an already
-migrated database. It refuses to create an empty database on startup.
+Start the web app with `bun run dev` in `apps/web`, then open it to create the first
+administrator with a name, email, and password. The setup route closes once any
+account exists. Administrators can add members from Account settings. Public
+signup is intentionally limited to this initial setup.
 
-All `/v1/` endpoints require `Authorization: Bearer $ADMIN_TOKEN`. Keep this
-administration token separate from router keys. Configure HTTPS at your reverse
-proxy before exposing the API outside a trusted local environment.
+The API defaults to `127.0.0.1:8080`. Override `API_ADDR` and `DB_PATH` as needed.
+The web server uses private `API_URL` (default `http://127.0.0.1:8080`); Compose
+sets it to `http://backend:8080`. No API credential is built into frontend assets.
+
+Authenticate API calls with a user session bearer token returned by login/signup:
+
+```sh
+curl http://127.0.0.1:8080/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"your-password"}'
+```
+
+The console stores this token in an HttpOnly, SameSite=Lax cookie; Secure is set
+on HTTPS. The Go API accepts bearer tokens, not browser cookies. SvelteKit checks
+same-origin form submissions and forwards sessions on the server. Sessions last
+seven days and are revoked on logout. Use HTTPS and configure `ORIGIN` at your
+reverse proxy before external access.
+
+`ADMIN_TOKEN` is optional legacy machine access; if set it must have at least 32
+characters. It is not needed for setup, login, or the frontend. Router keys cannot
+access the management API. Members can read shared data and update their own
+name; configuration and member creation require an administrator.
 
 ## Endpoints
 
 | Path | Methods | Behavior |
 | --- | --- | --- |
 | `/healthz` | GET | Public database availability check |
+| `/v1/auth/status` | GET | Public `needs_setup` flag |
+| `/v1/auth/signup` | POST | First account only; atomically creates administrator and session |
+| `/v1/auth/login` | POST | Email/password sign-in; returns token, expiry, safe user fields |
+| `/v1/auth/me` | GET, PUT | Current user; PUT accepts a name |
+| `/v1/auth/logout` | POST | Revoke current session |
+| `/v1/users` | POST | Administrator creates a member with name, email, password |
 | `/v1/connections` | GET, POST | List/create provider connections |
 | `/v1/connections/{id}` | GET, PUT, DELETE | Read/replace/delete a connection |
 | `/v1/models` | GET, POST | List/create models |
@@ -74,32 +98,32 @@ provider-specific contents when inference is implemented.
 
 ```sh
 curl http://127.0.0.1:8080/v1/connections \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Local","adapter":"whisper","location_kind":"local","base_url":"http://localhost:9000"}'
 
 curl http://127.0.0.1:8080/v1/models \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"large-v3","publisher":"openai","task":"stt"}'
 
 curl http://127.0.0.1:8080/v1/deployments \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Local Whisper","model_id":1,"connection_id":1,"upstream_model_id":"large-v3","capabilities_json":{"streaming":true}}'
 
 curl http://127.0.0.1:8080/v1/policies \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Speech","task":"stt","objective":"latency"}'
 
 curl -X PUT http://127.0.0.1:8080/v1/policies/1/targets/1 \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"priority":0}'
 
 curl http://127.0.0.1:8080/v1/api-keys \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"My app","default_policy_id":1}'
 ```

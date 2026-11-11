@@ -4,7 +4,7 @@
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import * as Dropdown from '#lib/components/ui/dropdown-menu/index.js';
 	import { navigation } from '#lib/fixtures.js';
-	import { usePreview } from '#lib/preview.svelte.js';
+
 	import Terminal from 'phosphor-svelte/lib/TerminalWindow';
 	import Squares from 'phosphor-svelte/lib/SquaresFour';
 	import Code from 'phosphor-svelte/lib/Code';
@@ -17,7 +17,7 @@
 	import Caret from 'phosphor-svelte/lib/CaretUpDown';
 	import Search from 'phosphor-svelte/lib/MagnifyingGlass';
 	let { onsearch }: { onsearch: () => void } = $props();
-	const preview = usePreview();
+	const user = $derived(page.data.user);
 	const sidebar = Sidebar.useSidebar();
 	const icons = {
 		overview: Squares,
@@ -113,12 +113,12 @@
 			><Sidebar.MenuItem
 				><Dropdown.Root
 					><Dropdown.Trigger class="account-trigger"
-						><span class="avatar">{preview.name.slice(0, 2).toUpperCase()}</span><span
-							class="account-label">{preview.name}<small>Administrator</small></span
+						><span class="avatar">{(user?.name ?? 'Account').slice(0, 2).toUpperCase()}</span><span
+							class="account-label">{user?.name ?? 'Account'}<small>{user?.role ?? ''}</small></span
 						><Caret size={14} /></Dropdown.Trigger
 					><Dropdown.Content side="top" align="start"
 						><Dropdown.Group
-							><Dropdown.Label>Local preview</Dropdown.Label><Dropdown.Item
+							><Dropdown.Label>{user?.email}</Dropdown.Label><Dropdown.Item
 								onSelect={() => goto('/settings/account')}>Account & appearance</Dropdown.Item
 							><Dropdown.Item onSelect={() => goto('/api-keys')}>API keys</Dropdown.Item
 							><Dropdown.Item onSelect={() => goto('/login')}>Sign in</Dropdown.Item
@@ -129,5 +129,6 @@
 			></Sidebar.Menu
 		>
 	</Sidebar.Footer>
+	<form id="logout-form" method="POST" action="/logout" class="hidden"></form>
 	<Sidebar.Rail />
 </Sidebar.Root>

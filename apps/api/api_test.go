@@ -269,9 +269,9 @@ func TestStartupRejectsMissingDatabase(t *testing.T) {
 		_ = database.Close()
 		t.Fatal("missing database should fail")
 	}
-	t.Setenv("ADMIN_TOKEN", "")
+	t.Setenv("ADMIN_TOKEN", "short")
 	if err := run(context.Background()); err == nil {
-		t.Fatal("missing admin token should fail")
+		t.Fatal("short legacy admin token should fail")
 	}
 }
 

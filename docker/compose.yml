@@ -7,7 +7,7 @@ services:
       dockerfile: docker/Dockerfile.api
     init: true
     environment:
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN to a secret of at least 32 characters}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       DB_PATH: /data/voice-cloud.db
       API_ADDR: 0.0.0.0:8080
     volumes:
@@ -31,13 +31,14 @@ services:
     init: true
     environment:
       ORIGIN: ${ORIGIN:-http://localhost:3000}
+      API_URL: http://backend:8080
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "bun", "-e", "const r = await fetch('http://127.0.0.1:3000'); process.exit(r.ok ? 0 : 1)"]
+      test: ["CMD", "bun", "-e", "const r = await fetch('http://127.0.0.1:3000/healthz'); process.exit(r.ok ? 0 : 1)"]
       interval: 10s
       timeout: 5s
       start_period: 15s

@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -22,6 +20,7 @@ import (
 type api struct {
 	db      *sql.DB
 	queries *db.Queries
+	logins  loginLimiter
 }
 
 type endpoint func(http.ResponseWriter, *http.Request) error
@@ -199,19 +198,6 @@ func mapItems[T any](items []T, view func(T) any) []any {
 		result = append(result, view(item))
 	}
 	return result
-}
-func authenticate(token string, next http.Handler) http.Handler {
-	expected := sha256.Sum256([]byte("Bearer " + token))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		actual := sha256.Sum256([]byte(r.Header.Get("Authorization")))
-		if token == "" || subtle.ConstantTimeCompare(actual[:], expected[:]) != 1 {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			w.Header().Set("Cache-Control", "no-store")
-			_ = send(w, http.StatusUnauthorized, map[string]string{"error": "admin bearer token required"})
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func pagination(r *http.Request) (db.ListRequestsParams, error) {
