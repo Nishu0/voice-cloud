@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+**/.svelte-kit
+**/build
+**/__pycache__
+data
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*

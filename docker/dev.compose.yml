@@ -1,0 +1,36 @@
+services:
+  backend:
+    develop:
+      watch:
+        - action: rebuild
+          path: ../apps/api
+        - action: rebuild
+          path: ../apps/worker
+        - action: rebuild
+          path: ../db
+        - action: rebuild
+          path: ../scripts/seed.py
+        - action: rebuild
+          path: ./backend-entrypoint.sh
+
+  web:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+    develop:
+      watch:
+        - action: sync
+          path: ../apps/web/src
+          target: /app/src
+        - action: sync
+          path: ../apps/web/static
+          target: /app/static
+        - action: rebuild
+          path: ../apps/web/package.json
+        - action: rebuild
+          path: ../apps/web/bun.lock
+        - action: rebuild
+          path: ../apps/web/vite.config.ts
+        - action: rebuild
+          path: ../apps/web/tsconfig.json
