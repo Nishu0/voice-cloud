@@ -15,7 +15,7 @@
 
 <header class:visible inert={!visible}>
 	<nav aria-label="Main">
-		<a class="brand" href="#top"><Mark size={20} /> Voice Cloud</a>
+		<a class="brand" href="#top"><Mark size={24} /> Voice Cloud</a>
 		<div class="sections">
 			{#each sections as section}
 				<a href="#{section.id}" aria-current={section.id === current.id ? 'true' : undefined}

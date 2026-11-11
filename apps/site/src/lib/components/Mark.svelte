@@ -1,10 +1,16 @@
 <script lang="ts">
-	let { size = 20 }: { size?: number } = $props();
+	// The Voice Cloud mark: a dot-matrix cloud on an indigo tile.
+	let { size = 22 }: { size?: number } = $props();
+
+	const rows = ['...XX..', '.XXXXX.', 'XXXXXXX', 'XXXXXXX'];
+	const dots = rows.flatMap((row, y) =>
+		[...row].flatMap((cell, x) => (cell === 'X' ? [{ x: 12.5 + x * 11, y: 29 + y * 11 }] : []))
+	);
 </script>
 
 <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
-	<path d="M50 4C45 29 29 45 4 50c25 0 46-21 46-46Z" fill="#c9adf9" />
-	<path d="M50 4c5 25 21 41 46 46-25 0-46-21-46-46Z" fill="#5a4fd8" />
-	<path d="M4 50c25 5 41 21 46 46 0-25-21-46-46-46Z" fill="#5b54ee" />
-	<path d="M96 50c-25 5-41 21-46 46 0-25 21-46 46-46Z" fill="#bb8ff3" />
+	<rect width="100" height="100" rx="24" fill="#3f38de" />
+	{#each dots as dot}
+		<rect x={dot.x} y={dot.y} width="9" height="9" rx="1.5" fill="#fff" />
+	{/each}
 </svg>
