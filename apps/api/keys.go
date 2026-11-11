@@ -13,7 +13,8 @@ import (
 
 func keyJSON(row db.ApiKey) any {
 	return map[string]any{"id": row.ID, "name": row.Name, "key_prefix": row.KeyPrefix,
-		"default_policy_id": intValue(row.DefaultPolicyID), "expires_at": intValue(row.ExpiresAt),
+		"created_by_user_id": intValue(row.CreatedByUserID),
+		"default_policy_id":  intValue(row.DefaultPolicyID), "expires_at": intValue(row.ExpiresAt),
 		"revoked_at": intValue(row.RevokedAt), "created_at": row.CreatedAt, "updated_at": row.UpdatedAt}
 }
 

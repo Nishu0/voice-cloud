@@ -25,9 +25,38 @@ func (q *Queries) AddDeploymentLanguage(ctx context.Context, arg AddDeploymentLa
 	return err
 }
 
+const consumeUserToken = `-- name: ConsumeUserToken :one
+UPDATE user_tokens SET used_at = ?1
+WHERE token_hash = ?2 AND purpose = ?3
+    AND used_at IS NULL AND created_at <= ?1
+    AND expires_at > ?1
+    AND user_id IN (SELECT id FROM users WHERE status = 'active')
+RETURNING token_hash, user_id, purpose, created_at, expires_at, used_at
+`
+
+type ConsumeUserTokenParams struct {
+	NowMs     sql.NullInt64 `json:"now_ms"`
+	TokenHash string        `json:"token_hash"`
+	Purpose   string        `json:"purpose"`
+}
+
+func (q *Queries) ConsumeUserToken(ctx context.Context, arg ConsumeUserTokenParams) (UserToken, error) {
+	row := q.db.QueryRowContext(ctx, consumeUserToken, arg.NowMs, arg.TokenHash, arg.Purpose)
+	var i UserToken
+	err := row.Scan(
+		&i.TokenHash,
+		&i.UserID,
+		&i.Purpose,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.UsedAt,
+	)
+	return i, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :one
-INSERT INTO api_keys (name, key_hash, key_prefix, default_policy_id, expires_at)
-VALUES (?, ?, ?, ?, ?) RETURNING id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at
+INSERT INTO api_keys (name, key_hash, key_prefix, default_policy_id, expires_at, created_by_user_id)
+VALUES (?, ?, ?, ?, ?, ?) RETURNING id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at, created_by_user_id
 `
 
 type CreateAPIKeyParams struct {
@@ -36,6 +65,7 @@ type CreateAPIKeyParams struct {
 	KeyPrefix       string        `json:"key_prefix"`
 	DefaultPolicyID sql.NullInt64 `json:"default_policy_id"`
 	ExpiresAt       sql.NullInt64 `json:"expires_at"`
+	CreatedByUserID sql.NullInt64 `json:"created_by_user_id"`
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
@@ -45,6 +75,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		arg.KeyPrefix,
 		arg.DefaultPolicyID,
 		arg.ExpiresAt,
+		arg.CreatedByUserID,
 	)
 	var i ApiKey
 	err := row.Scan(
@@ -57,6 +88,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -351,6 +383,86 @@ func (q *Queries) CreateRoutingPolicy(ctx context.Context, arg CreateRoutingPoli
 	return i, err
 }
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (email, name, password_hash, role)
+VALUES (?, ?, ?, ?) RETURNING id, email, name, password_hash, role, status, email_verified_at, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	Email        string `json:"email"`
+	Name         string `json:"name"`
+	PasswordHash string `json:"password_hash"`
+	Role         string `json:"role"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.Email,
+		arg.Name,
+		arg.PasswordHash,
+		arg.Role,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createUserSession = `-- name: CreateUserSession :exec
+INSERT INTO user_sessions (token_hash, user_id, created_at, expires_at)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateUserSessionParams struct {
+	TokenHash string `json:"token_hash"`
+	UserID    int64  `json:"user_id"`
+	CreatedAt int64  `json:"created_at"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createUserSession,
+		arg.TokenHash,
+		arg.UserID,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const createUserToken = `-- name: CreateUserToken :exec
+INSERT INTO user_tokens (token_hash, user_id, purpose, created_at, expires_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateUserTokenParams struct {
+	TokenHash string `json:"token_hash"`
+	UserID    int64  `json:"user_id"`
+	Purpose   string `json:"purpose"`
+	CreatedAt int64  `json:"created_at"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
+func (q *Queries) CreateUserToken(ctx context.Context, arg CreateUserTokenParams) error {
+	_, err := q.db.ExecContext(ctx, createUserToken,
+		arg.TokenHash,
+		arg.UserID,
+		arg.Purpose,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const deleteAPIKey = `-- name: DeleteAPIKey :execrows
 DELETE FROM api_keys WHERE id = ?
 `
@@ -416,6 +528,30 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) (int64, error)
 	return result.RowsAffected()
 }
 
+const deleteExpiredUserSessions = `-- name: DeleteExpiredUserSessions :execrows
+DELETE FROM user_sessions WHERE expires_at <= ?
+`
+
+func (q *Queries) DeleteExpiredUserSessions(ctx context.Context, expiresAt int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredUserSessions, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteExpiredUserTokens = `-- name: DeleteExpiredUserTokens :execrows
+DELETE FROM user_tokens WHERE expires_at <= ?
+`
+
+func (q *Queries) DeleteExpiredUserTokens(ctx context.Context, expiresAt int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredUserTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteModel = `-- name: DeleteModel :execrows
 DELETE FROM models WHERE id = ?
 `
@@ -446,6 +582,47 @@ DELETE FROM routing_policies WHERE id = ?
 
 func (q *Queries) DeleteRoutingPolicy(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteRoutingPolicy, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteUser = `-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = ?
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :execrows
+DELETE FROM user_sessions WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUserSessions, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteUserTokens = `-- name: DeleteUserTokens :execrows
+DELETE FROM user_tokens WHERE user_id = ? AND purpose = ?
+`
+
+type DeleteUserTokensParams struct {
+	UserID  int64  `json:"user_id"`
+	Purpose string `json:"purpose"`
+}
+
+func (q *Queries) DeleteUserTokens(ctx context.Context, arg DeleteUserTokensParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUserTokens, arg.UserID, arg.Purpose)
 	if err != nil {
 		return 0, err
 	}
@@ -505,7 +682,7 @@ func (q *Queries) FinishRequest(ctx context.Context, arg FinishRequestParams) (i
 }
 
 const getAPIKey = `-- name: GetAPIKey :one
-SELECT id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at FROM api_keys WHERE id = ?
+SELECT id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at, created_by_user_id FROM api_keys WHERE id = ?
 `
 
 func (q *Queries) GetAPIKey(ctx context.Context, id int64) (ApiKey, error) {
@@ -521,12 +698,13 @@ func (q *Queries) GetAPIKey(ctx context.Context, id int64) (ApiKey, error) {
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
 const getActiveAPIKeyByHash = `-- name: GetActiveAPIKeyByHash :one
-SELECT id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at FROM api_keys WHERE key_hash = ?1 AND revoked_at IS NULL
+SELECT id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at, created_by_user_id FROM api_keys WHERE key_hash = ?1 AND revoked_at IS NULL
     AND (expires_at IS NULL OR expires_at > ?2)
 `
 
@@ -548,6 +726,32 @@ func (q *Queries) GetActiveAPIKeyByHash(ctx context.Context, arg GetActiveAPIKey
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedByUserID,
+	)
+	return i, err
+}
+
+const getActiveUserSession = `-- name: GetActiveUserSession :one
+SELECT s.token_hash, s.user_id, s.created_at, s.expires_at, s.revoked_at FROM user_sessions s JOIN users u ON u.id = s.user_id
+WHERE s.token_hash = ?1 AND s.revoked_at IS NULL
+    AND s.created_at <= ?2 AND s.expires_at > ?2
+    AND u.status = 'active'
+`
+
+type GetActiveUserSessionParams struct {
+	TokenHash string `json:"token_hash"`
+	NowMs     int64  `json:"now_ms"`
+}
+
+func (q *Queries) GetActiveUserSession(ctx context.Context, arg GetActiveUserSessionParams) (UserSession, error) {
+	row := q.db.QueryRowContext(ctx, getActiveUserSession, arg.TokenHash, arg.NowMs)
+	var i UserSession
+	err := row.Scan(
+		&i.TokenHash,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -743,6 +947,48 @@ func (q *Queries) GetRoutingPolicy(ctx context.Context, id int64) (RoutingPolicy
 	return i, err
 }
 
+const getUser = `-- name: GetUser :one
+SELECT id, email, name, password_hash, role, status, email_verified_at, created_at, updated_at FROM users WHERE id = ?
+`
+
+func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, name, password_hash, role, status, email_verified_at, created_at, updated_at FROM users WHERE email = ?
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAPIKeyRequests = `-- name: ListAPIKeyRequests :many
 SELECT id, api_key_id, task, transport, language_tag, policy_id, routing_snapshot_json, status, started_at, finished_at, error_code, trace_id, idempotency_key, request_fingerprint FROM requests WHERE api_key_id = ?
 ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?
@@ -793,7 +1039,7 @@ func (q *Queries) ListAPIKeyRequests(ctx context.Context, arg ListAPIKeyRequests
 }
 
 const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at FROM api_keys ORDER BY created_at DESC, id DESC
+SELECT id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at, created_by_user_id FROM api_keys ORDER BY created_at DESC, id DESC
 `
 
 func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
@@ -815,6 +1061,7 @@ func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
 			&i.RevokedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -1320,6 +1567,59 @@ func (q *Queries) ListTraceRequests(ctx context.Context, traceID sql.NullString)
 	return items, nil
 }
 
+const listUsers = `-- name: ListUsers :many
+SELECT id, email, name, role, status, email_verified_at, created_at, updated_at
+FROM users ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+`
+
+type ListUsersParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+type ListUsersRow struct {
+	ID              int64         `json:"id"`
+	Email           string        `json:"email"`
+	Name            string        `json:"name"`
+	Role            string        `json:"role"`
+	Status          string        `json:"status"`
+	EmailVerifiedAt sql.NullInt64 `json:"email_verified_at"`
+	CreatedAt       int64         `json:"created_at"`
+	UpdatedAt       int64         `json:"updated_at"`
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.Role,
+			&i.Status,
+			&i.EmailVerifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeDeploymentLanguage = `-- name: RemoveDeploymentLanguage :execrows
 DELETE FROM deployment_languages WHERE deployment_id = ? AND language_tag = ?
 `
@@ -1366,6 +1666,24 @@ type RevokeAPIKeyParams struct {
 
 func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, revokeAPIKey, arg.NowMs, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeUserSession = `-- name: RevokeUserSession :execrows
+UPDATE user_sessions SET revoked_at = ?1
+WHERE token_hash = ?2 AND revoked_at IS NULL
+`
+
+type RevokeUserSessionParams struct {
+	NowMs     sql.NullInt64 `json:"now_ms"`
+	TokenHash string        `json:"token_hash"`
+}
+
+func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeUserSession, arg.NowMs, arg.TokenHash)
 	if err != nil {
 		return 0, err
 	}
@@ -1423,6 +1741,24 @@ func (q *Queries) SetPolicyTarget(ctx context.Context, arg SetPolicyTargetParams
 	return err
 }
 
+const setUserStatus = `-- name: SetUserStatus :execrows
+UPDATE users SET status = ?, updated_at = ? WHERE id = ?
+`
+
+type SetUserStatusParams struct {
+	Status    string `json:"status"`
+	UpdatedAt int64  `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+func (q *Queries) SetUserStatus(ctx context.Context, arg SetUserStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setUserStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const startRequest = `-- name: StartRequest :execrows
 UPDATE requests SET status = 'running' WHERE id = ? AND status = 'pending'
 `
@@ -1437,7 +1773,7 @@ func (q *Queries) StartRequest(ctx context.Context, id string) (int64, error) {
 
 const updateAPIKey = `-- name: UpdateAPIKey :one
 UPDATE api_keys SET name = ?, default_policy_id = ?, expires_at = ?, updated_at = ?
-WHERE id = ? RETURNING id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at
+WHERE id = ? RETURNING id, name, key_hash, key_prefix, default_policy_id, expires_at, revoked_at, created_at, updated_at, created_by_user_id
 `
 
 type UpdateAPIKeyParams struct {
@@ -1467,6 +1803,7 @@ func (q *Queries) UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) (Api
 		&i.RevokedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
@@ -1679,4 +2016,73 @@ func (q *Queries) UpdateRoutingPolicy(ctx context.Context, arg UpdateRoutingPoli
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users SET name = ?, role = ?, updated_at = ? WHERE id = ? RETURNING id, email, name, password_hash, role, status, email_verified_at, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	UpdatedAt int64  `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUser,
+		arg.Name,
+		arg.Role,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :execrows
+UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash string `json:"password_hash"`
+	UpdatedAt    int64  `json:"updated_at"`
+	ID           int64  `json:"id"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateUserPassword, arg.PasswordHash, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const verifyUserEmail = `-- name: VerifyUserEmail :execrows
+UPDATE users SET email_verified_at = ?1, updated_at = ?1
+WHERE id = ?2 AND email_verified_at IS NULL
+`
+
+type VerifyUserEmailParams struct {
+	NowMs sql.NullInt64 `json:"now_ms"`
+	ID    int64         `json:"id"`
+}
+
+func (q *Queries) VerifyUserEmail(ctx context.Context, arg VerifyUserEmailParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, verifyUserEmail, arg.NowMs, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

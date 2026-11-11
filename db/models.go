@@ -18,6 +18,7 @@ type ApiKey struct {
 	RevokedAt       sql.NullInt64 `json:"revoked_at"`
 	CreatedAt       int64         `json:"created_at"`
 	UpdatedAt       int64         `json:"updated_at"`
+	CreatedByUserID sql.NullInt64 `json:"created_by_user_id"`
 }
 
 type Attempt struct {
@@ -121,4 +122,33 @@ type RoutingPolicy struct {
 	ConstraintsJson string `json:"constraints_json"`
 	CreatedAt       int64  `json:"created_at"`
 	UpdatedAt       int64  `json:"updated_at"`
+}
+
+type User struct {
+	ID              int64         `json:"id"`
+	Email           string        `json:"email"`
+	Name            string        `json:"name"`
+	PasswordHash    string        `json:"password_hash"`
+	Role            string        `json:"role"`
+	Status          string        `json:"status"`
+	EmailVerifiedAt sql.NullInt64 `json:"email_verified_at"`
+	CreatedAt       int64         `json:"created_at"`
+	UpdatedAt       int64         `json:"updated_at"`
+}
+
+type UserSession struct {
+	TokenHash string        `json:"token_hash"`
+	UserID    int64         `json:"user_id"`
+	CreatedAt int64         `json:"created_at"`
+	ExpiresAt int64         `json:"expires_at"`
+	RevokedAt sql.NullInt64 `json:"revoked_at"`
+}
+
+type UserToken struct {
+	TokenHash string        `json:"token_hash"`
+	UserID    int64         `json:"user_id"`
+	Purpose   string        `json:"purpose"`
+	CreatedAt int64         `json:"created_at"`
+	ExpiresAt int64         `json:"expires_at"`
+	UsedAt    sql.NullInt64 `json:"used_at"`
 }

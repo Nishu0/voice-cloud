@@ -32,7 +32,7 @@ class MigrationTest(unittest.TestCase):
         self.make('db-up')
         with sqlite3.connect(self.path) as actual:
             original_schema = schema(actual)
-            self.assertEqual(len([row for row in original_schema if row[0] == 'table']), 10)
+            self.assertEqual(len([row for row in original_schema if row[0] == 'table']), 13)
             actual.execute("""
                 INSERT INTO connections (name, adapter, location_kind, base_url)
                 VALUES ('test', 'whisper', 'local', 'http://localhost:9000')
@@ -41,6 +41,10 @@ class MigrationTest(unittest.TestCase):
         self.make('db-status')
         self.make('db-version')
         with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM connections').fetchone(), (1,))
+        self.make('db-down')
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(len([row for row in schema(db) if row[0] == 'table']), 10)
             self.assertEqual(db.execute('SELECT count(*) FROM connections').fetchone(), (1,))
         self.make('db-down')
         with sqlite3.connect(self.path) as db:
@@ -55,12 +59,26 @@ class MigrationTest(unittest.TestCase):
         self.make('db-backup', f'BACKUP={backup}')
         with sqlite3.connect(backup) as db:
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone(), ('ok',))
-            self.assertEqual(len([row for row in schema(db) if row[0] == 'table']), 10)
+            self.assertEqual(len([row for row in schema(db) if row[0] == 'table']), 13)
         before = backup.read_bytes()
         self.assertNotEqual(
             self.make('db-backup', f'BACKUP={backup}', check=False).returncode, 0,
         )
         self.assertEqual(backup.read_bytes(), before)
+
+    def test_users_upgrade_preserves_existing_api_keys(self):
+        self.path.parent.mkdir(parents=True)
+        subprocess.run(['goose', '-env=none', '-dir', 'db/migrations', 'sqlite3',
+                        str(self.path), 'up-to', '1'], cwd=ROOT,
+                       capture_output=True, text=True, check=True)
+        with sqlite3.connect(self.path) as db:
+            db.execute("INSERT INTO api_keys (name, key_hash, key_prefix) VALUES ('existing', 'hash', 'prefix')")
+        self.make('db-up')
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute(
+                'SELECT name, key_hash, created_by_user_id FROM api_keys'
+            ).fetchone(), ('existing', 'hash', None))
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
 
 
 if __name__ == '__main__':

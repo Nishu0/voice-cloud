@@ -102,8 +102,8 @@ ORDER BY t.priority, d.id;
 DELETE FROM policy_targets WHERE policy_id = ? AND deployment_id = ?;
 
 -- name: CreateAPIKey :one
-INSERT INTO api_keys (name, key_hash, key_prefix, default_policy_id, expires_at)
-VALUES (?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO api_keys (name, key_hash, key_prefix, default_policy_id, expires_at, created_by_user_id)
+VALUES (?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: GetAPIKey :one
 SELECT * FROM api_keys WHERE id = ?;
@@ -204,3 +204,71 @@ WHERE attempt_id = ? AND metric = ? RETURNING *;
 
 -- name: DeleteAttemptUsage :execrows
 DELETE FROM attempt_usage WHERE attempt_id = ? AND metric = ?;
+
+-- name: CreateUser :one
+INSERT INTO users (email, name, password_hash, role)
+VALUES (?, ?, ?, ?) RETURNING *;
+
+-- name: GetUser :one
+SELECT * FROM users WHERE id = ?;
+
+-- name: GetUserByEmail :one
+SELECT * FROM users WHERE email = ?;
+
+-- name: ListUsers :many
+SELECT id, email, name, role, status, email_verified_at, created_at, updated_at
+FROM users ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?;
+
+-- name: UpdateUser :one
+UPDATE users SET name = ?, role = ?, updated_at = ? WHERE id = ? RETURNING *;
+
+-- name: SetUserStatus :execrows
+UPDATE users SET status = ?, updated_at = ? WHERE id = ?;
+
+-- name: UpdateUserPassword :execrows
+UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?;
+
+-- name: VerifyUserEmail :execrows
+UPDATE users SET email_verified_at = sqlc.arg(now_ms), updated_at = sqlc.arg(now_ms)
+WHERE id = sqlc.arg(id) AND email_verified_at IS NULL;
+
+-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = ?;
+
+-- name: CreateUserSession :exec
+INSERT INTO user_sessions (token_hash, user_id, created_at, expires_at)
+VALUES (?, ?, ?, ?);
+
+-- name: GetActiveUserSession :one
+SELECT s.* FROM user_sessions s JOIN users u ON u.id = s.user_id
+WHERE s.token_hash = sqlc.arg(token_hash) AND s.revoked_at IS NULL
+    AND s.created_at <= sqlc.arg(now_ms) AND s.expires_at > sqlc.arg(now_ms)
+    AND u.status = 'active';
+
+-- name: RevokeUserSession :execrows
+UPDATE user_sessions SET revoked_at = sqlc.arg(now_ms)
+WHERE token_hash = sqlc.arg(token_hash) AND revoked_at IS NULL;
+
+-- name: DeleteUserSessions :execrows
+DELETE FROM user_sessions WHERE user_id = ?;
+
+-- name: DeleteExpiredUserSessions :execrows
+DELETE FROM user_sessions WHERE expires_at <= ?;
+
+-- name: CreateUserToken :exec
+INSERT INTO user_tokens (token_hash, user_id, purpose, created_at, expires_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: ConsumeUserToken :one
+UPDATE user_tokens SET used_at = sqlc.arg(now_ms)
+WHERE token_hash = sqlc.arg(token_hash) AND purpose = sqlc.arg(purpose)
+    AND used_at IS NULL AND created_at <= sqlc.arg(now_ms)
+    AND expires_at > sqlc.arg(now_ms)
+    AND user_id IN (SELECT id FROM users WHERE status = 'active')
+RETURNING *;
+
+-- name: DeleteUserTokens :execrows
+DELETE FROM user_tokens WHERE user_id = ? AND purpose = ?;
+
+-- name: DeleteExpiredUserTokens :execrows
+DELETE FROM user_tokens WHERE expires_at <= ?;
